@@ -62,8 +62,9 @@ protected:
 
 class action::place : public action {
 public:
+	int pos;
 	static constexpr unsigned type = type_flag('p');
-	place(int i, unsigned who) : action(place::type | ((who & 0xff) << 16) | (i & 0xffff)) {}
+	place(int i, unsigned who) : action(place::type | ((who & 0xff) << 16) | (i & 0xffff)) { pos = i; }
 	place(int x, int y, unsigned who) : place(board::point(x, y), who) {}
 	place(const board::point& p, unsigned who) : place(p.i, who) {}
 	place(const action& a = {}) : action(a) {}

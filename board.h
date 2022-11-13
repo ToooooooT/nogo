@@ -213,11 +213,15 @@ public:
 	void rotate_left() { transpose(); reflect_horizontal(); } // counterclockwise
 	void reverse() { reflect_horizontal(); reflect_vertical(); }
 
+	void setBoard(int pos, piece_type color) {
+		stone[pos / 9][pos % 9] = color;
+	}
+
 	grid getStone() {
 		return stone;
 	}
 
-	grid getAttr() {
+	data getAttr() {
 		return attr;
 	}
 
