@@ -81,7 +81,7 @@ class player : public random_agent {
 public:
 	typedef struct node {
 		struct node *child[CHILDNODESIZE];
-		int count, val[SIMULATION_TIMES];
+		int count, *val;
 		bool isLeaf;
 		board::piece_type color;
 	} node_t;
@@ -128,6 +128,8 @@ public:
 			root->isLeaf = true;
 			root->count = 0;
 			root->color = who;
+            // root count = 1000
+            root->val = (int *) malloc (sizeof(int) * simulation_times);
 			for (int i = 0; i < simulation_times; ++i)
 				playOneSequence(root, state);
             
@@ -243,10 +245,14 @@ public:
     		}   
         }
 		for (int i = last; i >= 0; --i) {
-            if (selectNode[i]->count == 0) 
+            if (selectNode[i]->count == 0)  {
+                selectNode[i]->val = (int *) malloc (1 * sizeof(int));
     			selectNode[i]->val[selectNode[i]->count] = value;
-            else
+            } else {
+                if (__builtin_popcount(selectNode[i]->count) == 1)
+                    selectNode[i]->val = (int *) realloc (selectNode[i]->val, (selectNode[i]->count << 1) * sizeof(int));
     			selectNode[i]->val[selectNode[i]->count] = selectNode[i]->val[selectNode[i]->count - 1] + value;
+            }
 			selectNode[i]->count += 1;
 		}
 	}
