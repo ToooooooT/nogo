@@ -22,6 +22,7 @@
 
 #define CHILDNODESIZE 81
 #define SIMULATION_TIMES 1000
+#define _b 0.025
 
 class agent {
 public:
@@ -81,7 +82,7 @@ class player : public random_agent {
 public:
 	typedef struct node {
 		struct node *child[CHILDNODESIZE];
-		int count, *val;
+		int count, *val, rave_count, *rave_val;
 		bool isLeaf;
 		board::piece_type color;
 	} node_t;
@@ -100,6 +101,10 @@ public:
         if (search() == "MCTS")
             simulation_times = stoi(sim_time());
 	}
+
+    double beta(int count, int rave_count) {
+        return rave_count / (rave_count + count + 4 * (double) rave_count * (double) count * pow((_b), 2));
+    }
 
 	virtual action take_action(const board& state) {
 		if (search() == "Random") {
@@ -126,10 +131,11 @@ public:
             // create root of MCTS tree
 			node_t *root = (node_t *) malloc (sizeof(node_t));
 			root->isLeaf = true;
-			root->count = 0;
+			root->count = root->rave_count = 0;
 			root->color = who;
-            // root count = 1000
-            root->val = (int *) malloc (sizeof(int) * simulation_times);
+            // root count = 1000, 1024 becuase * 2
+            root->val = (int *) malloc (sizeof(int) * 1024);
+            root->rave_val = (int *) malloc (sizeof(int) * 1024);
 			for (int i = 0; i < simulation_times; ++i)
 				playOneSequence(root, state);
             
@@ -147,12 +153,21 @@ public:
                 int value = root->child[indexs[i]]->val[count - 1];
                 int max_count = root->child[indexs[index]]->count;
                 int max_value = root->child[indexs[index]]->val[max_count - 1];
+                int rave_count = root->child[indexs[i]]->rave_count;
+                int rave_value = root->child[indexs[i]]->rave_val[rave_count - 1];
+                int max_rave_count = root->child[indexs[index]]->rave_count;
+                int max_rave_value = root->child[indexs[index]]->rave_val[max_rave_count - 1];
                 if (root->child[indexs[i]]->count)
-    				index = (double) value  / count > (double) max_value / max_count ? i : index;
+    				index = (1 - beta(count, rave_count)) * (double) value  / count + beta(count, rave_count) * (double) rave_value / rave_count > (1 - beta(max_count, max_rave_count)) * (double) max_value  / max_count + beta(max_count, max_rave_count) * (double) max_rave_value / max_rave_count ? i : index;
             }
 
             // clear MCTS search tree
             free_tree(root);
+
+            /*
+            board::grid stone = board(state).getStone();
+            show_board(stone);
+            */
 
             int tmp = indexs[index];
             indexs.clear();
@@ -172,6 +187,7 @@ public:
 
     double UCB_Tuned (node_t *node, int total) {
         double mean =  (double) node->val[node->count - 1] / node->count;
+        double rave_mean =  (double) node->rave_val[node->rave_count - 1] / node->rave_count;
         double value = - pow(mean, 2) + pow(2 * log10(total) / node->count, 0.5);
         double sum = 0;
         for (int i = 0; i < node->count; ++i)
@@ -179,7 +195,7 @@ public:
         sum /= node->count;
         value += sum;
         double min = 0.25 < value ? 0.25 : value;
-        return mean + pow(log10(total) * min / node->count, 0.5);
+        return (1 - beta(node->count, node->rave_count)) * mean + beta(node->count, node->rave_count) * rave_mean + pow(log10(total) * min / node->count, 0.5);
     }
 
 	node_t *select (node_t *parent, board& presentBoard, board::piece_type color) {
@@ -232,6 +248,10 @@ public:
 
 	void updateValue (node_t *selectNode[CHILDNODESIZE], int value, int last, bool isEndBoard) {
 		node_t *p = selectNode[last];
+
+        // store every move in selected path 
+        int move[last];
+
         if (!isEndBoard) {
 		    p->isLeaf = false;
     		for (int i = 0; i < CHILDNODESIZE; ++i) {
@@ -245,15 +265,42 @@ public:
     		}   
         }
 		for (int i = last; i >= 0; --i) {
+            // store select move
+            if (i < last) {
+                for (int j = 0; j < CHILDNODESIZE; ++j) {
+                    if (selectNode[i]->child[j] == selectNode[i + 1]) {
+                        move[i] = j;
+                        break;
+                    }
+                }
+            }
+            
+            // update by rave
+            for (int j = last - 1; j > i; --j) {
+                if (__builtin_popcount(selectNode[j]->rave_count) == 1)
+                    selectNode[j]->rave_val = (int *) realloc (selectNode[j]->rave_val, (selectNode[j]->rave_count << 1) * sizeof(int));
+    			selectNode[j]->rave_val[selectNode[j]->rave_count] = selectNode[j]->rave_val[selectNode[j]->rave_count - 1] + value;
+			    selectNode[j]->rave_count += 1;
+            }
+
             if (selectNode[i]->count == 0)  {
                 selectNode[i]->val = (int *) malloc (1 * sizeof(int));
     			selectNode[i]->val[selectNode[i]->count] = value;
+                selectNode[i]->rave_val = (int *) malloc (1 * sizeof(int));
+    			selectNode[i]->rave_val[selectNode[i]->rave_count] = value;
             } else {
+                // simple
                 if (__builtin_popcount(selectNode[i]->count) == 1)
                     selectNode[i]->val = (int *) realloc (selectNode[i]->val, (selectNode[i]->count << 1) * sizeof(int));
     			selectNode[i]->val[selectNode[i]->count] = selectNode[i]->val[selectNode[i]->count - 1] + value;
+
+                // rave
+                if (__builtin_popcount(selectNode[i]->rave_count) == 1)
+                    selectNode[i]->rave_val = (int *) realloc (selectNode[i]->rave_val, (selectNode[i]->rave_count << 1) * sizeof(int));
+    			selectNode[i]->rave_val[selectNode[i]->rave_count] = selectNode[i]->rave_val[selectNode[i]->rave_count - 1] + value;
             }
 			selectNode[i]->count += 1;
+			selectNode[i]->rave_count += 1;
 		}
 	}
 
