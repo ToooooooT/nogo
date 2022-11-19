@@ -21,6 +21,7 @@
 #include "action.h"
 
 #define CHILDNODESIZE 81
+#define SIMULATION_TIMES 1000
 
 class agent {
 public:
@@ -44,7 +45,7 @@ public:
 	virtual std::string name() const { return property("name"); }
 	virtual std::string role() const { return property("role"); }
 	virtual std::string search() const { return property("search"); }
-	// virtual std::string sim_time() const { return property("simulation"); }
+	virtual std::string sim_time() const { return property("simulation"); }
 
 protected:
 	typedef std::string key;
@@ -80,7 +81,7 @@ class player : public random_agent {
 public:
 	typedef struct node {
 		struct node *child[CHILDNODESIZE];
-		int count, val;
+		int count, val[SIMULATION_TIMES];
 		bool isLeaf;
 		board::piece_type color;
 	} node_t;
@@ -96,6 +97,8 @@ public:
 		for (size_t i = 0; i < space.size(); i++)
 			space[i] = action::place(i, who);
         srand(time(NULL));
+        if (search() == "MCTS")
+            simulation_times = stoi(sim_time());
 	}
 
 	virtual action take_action(const board& state) {
@@ -108,46 +111,46 @@ public:
 			}
 			return action();
 		} else if (search() == "MCTS") {
+            // if no legal move just return
             bool flag = false;
 			for (const action::place& move : space) {
 				board after = state;
-				if (move.apply(after) == board::legal)
+				if (move.apply(after) == board::legal) {
                     flag = true;
+                    break;
+                }
             }
             if (!flag)
                 return action();
 
+            // create root of MCTS tree
 			node_t *root = (node_t *) malloc (sizeof(node_t));
 			root->isLeaf = true;
 			root->count = 0;
-			root->val = 0;
 			root->color = who;
-			for (int i = 0; i < 500; ++i) {
+			for (int i = 0; i < simulation_times; ++i)
 				playOneSequence(root, state);
-                //printf("%d\n", i);
-            }
-
             
+            // shuffle index to choose random move
             std::vector<int> indexs;
             for (int i = 0; i < CHILDNODESIZE; ++i)
                 indexs.push_back(i);
             std::shuffle(indexs.begin(), indexs.end(), engine);
 
 			int index = 0;
-            while (root->child[indexs[index]]->count == 0)
+            while (!(root->child[indexs[index]]->count))
                 index += 1;
 			for (int i = index + 1; i < CHILDNODESIZE; ++i) {
-                if (root->child[indexs[i]]->count != 0)
-    				index = (double) root->child[indexs[i]]->val / root->child[indexs[i]]->count > (double) root->child[indexs[index]]->val / root->child[indexs[index]]->count ? i : index;
+                int count = root->child[indexs[i]]->count;
+                int value = root->child[indexs[i]]->val[count - 1];
+                int max_count = root->child[indexs[index]]->count;
+                int max_value = root->child[indexs[index]]->val[max_count - 1];
+                if (root->child[indexs[i]]->count)
+    				index = (double) value  / count > (double) max_value / max_count ? i : index;
             }
 
+            // clear MCTS search tree
             free_tree(root);
-
-            /*
-            board::grid stone = board(state).getStone();
-            show_board(stone);
-            printf("move index: %d\n", indexs[index]);
-            */
 
             int tmp = indexs[index];
             indexs.clear();
@@ -161,24 +164,42 @@ public:
 		return flag == "black" ? 1u : 2u;
 	}
 
+    double UCB (int val, int count, int total) {
+        return (double) val / count + pow(2 * log10(total) / count, 0.5);
+    }
+
+    double UCB_Tuned (node_t *node, int total) {
+        double mean =  (double) node->val[node->count - 1] / node->count;
+        double value = - pow(mean, 2) + pow(2 * log10(total) / node->count, 0.5);
+        double sum = 0;
+        for (int i = 0; i < node->count; ++i)
+            sum += pow(node->val[i], 2);
+        sum /= node->count;
+        value += sum;
+        double min = 0.25 < value ? 0.25 : value;
+        return mean + pow(log10(total) * min / node->count, 0.5);
+    }
+
 	node_t *select (node_t *parent, board& presentBoard, board::piece_type color) {
 		int total = 0;
 		double v[CHILDNODESIZE] = {0.0};
+        // calculate total count 
 		for (int i = 0; i < CHILDNODESIZE; ++i)
 			total += parent->child[i]->count;
 
+        // calculate each UCB of childs' node
 		for (int i = 0; i < CHILDNODESIZE; ++i) {
 			board after = presentBoard;
 			if (action::place(i, parent->color).apply(after) == board::legal) {
 				if (parent->color == color)
-					v[i] = parent->child[i]->count == 0 ? 1e308 : (double) parent->child[i]->val /  parent->child[i]->count + pow(2 * log10(total) / parent->child[i]->count, 0.5);
+					v[i] = parent->child[i]->count == 0 ? 1e308 : UCB_Tuned(parent->child[i], total);
 				else
-					v[i] = parent->child[i]->count == 0 ? 0 : (double) parent->child[i]->val /  parent->child[i]->count + pow(2 * log10(total) / parent->child[i]->count, 0.5);
+					v[i] = parent->child[i]->count == 0 ? 0 : UCB_Tuned(parent->child[i], total);
 			} else
 				v[i] = parent->color == color ? -1 : 1.2e308;
 		}
 
-
+        // shuffle index to choose random child
         std::vector<int> indexs;
         for (int i = 0; i < CHILDNODESIZE; ++i)
             indexs.push_back(i);
@@ -190,6 +211,7 @@ public:
         while (parent->color != color && v[indexs[i]] == 1.2e308)
             i += 1;
 		for (int j = i + 1; j < CHILDNODESIZE; ++j) {
+            // choose max value when match color otherwise min value
 			if (parent->color == color)
 				i = v[indexs[j]] > v[indexs[i]] ? j : i;
 			else
@@ -217,11 +239,14 @@ public:
 				    p->child[i]->color = board::piece_type::white;
     			else
 	    			p->child[i]->color = board::piece_type::black;
-		    	p->child[i]->count = p->child[i]->val = 0;
+		    	p->child[i]->count = 0;
     		}   
         }
 		for (int i = last; i >= 0; --i) {
-			selectNode[i]->val += value;
+            if (selectNode[i]->count == 0) 
+    			selectNode[i]->val[selectNode[i]->count] = value;
+            else
+    			selectNode[i]->val[selectNode[i]->count] = selectNode[i]->val[selectNode[i]->count - 1] + value;
 			selectNode[i]->count += 1;
 		}
 	}
@@ -291,9 +316,8 @@ public:
 
     void show_board (board::grid stone) {
         for (int i = 0; i < 9; ++i) {
-                for (int j = 0; j < 9; ++j) {
+                for (int j = 0; j < 9; ++j)
                     printf("%u ", stone[i][j]);
-                }
                 printf("\n");
         }
         printf("\n\n");
@@ -302,4 +326,6 @@ public:
 private:
 	std::vector<action::place> space;
 	board::piece_type who;
+    int simulation_times;
 };
+
