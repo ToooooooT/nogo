@@ -102,7 +102,8 @@ public:
 	}
 
     double beta (int count, int rave_count) {
-        return rave_count / (rave_count + count + 4 * (double) rave_count * (double) count * pow((_b), 2));
+        return 0;
+        //return rave_count / (rave_count + count + 4 * (double) rave_count * (double) count * pow((_b), 2));
     }
 
 	virtual action take_action(const board& state) {
@@ -141,15 +142,21 @@ public:
 			int index = 0;
             while (root->child[indexs[index]]->count == 0)
                 index += 1;
+            node_t *p = root->child[indexs[index]];
+            double max_q = (double) p->val /  p->count;
+            double max_q_rave = (double) p->rave_val / p->rave_count;
+            double max_beta_ = beta(p->count, p->rave_count);
+            double max = (1 - max_beta_) * max_q + max_beta_ * max_q_rave;
 			for (int i = index + 1; i < CHILDNODESIZE; ++i) {
-                if (root->child[indexs[i]]->count != 0) {
-                    double q = (double) root->child[indexs[i]]->val /  root->child[indexs[i]]->count;
-                    double q_rave = (double) root->child[indexs[i]]->rave_val /  root->child[indexs[i]]->rave_count;
-                    double beta_ = beta(root->child[indexs[i]]->count, root->child[indexs[i]]->rave_count);
-                    double max_q = (double) root->child[indexs[index]]->val /  root->child[indexs[index]]->count;
-                    double max_q_rave = (double) root->child[indexs[index]]->rave_val /  root->child[indexs[index]]->rave_count;
-                    double max_beta_ = beta(root->child[indexs[index]]->count, root->child[indexs[index]]->rave_count);
-    				index = (1 - beta_) * q + beta_ * q_rave > (1 - max_beta_) * max_q + max_beta_ * max_q_rave ? i : index;
+                node_t *cur = root->child[indexs[i]];
+                if (cur->count != 0) {
+                    double q = (double) cur->val /  cur->count;
+                    double q_rave = (double) cur->rave_val /  cur->rave_count;
+                    double beta_ = beta(cur->count, cur->rave_count);
+                    if ((1 - beta_) * q + beta_ * q_rave > max) {
+    				    index = i;
+                        max = (1 - beta_) * q + beta_ * q_rave;
+                    }
                 }
             }
 
@@ -181,14 +188,15 @@ public:
 
 		for (int i = 0; i < CHILDNODESIZE; ++i) {
 			board after = presentBoard;
+            node_t *child = parent->child[i];
 			if (action::place(i, parent->color).apply(after) == board::legal) {
-                double q = (double) parent->child[i]->val /  parent->child[i]->count;
-                double q_rave = (double) parent->child[i]->rave_val /  parent->child[i]->rave_count;
-                double beta_ = beta(parent->child[i]->count, parent->child[i]->rave_count);
+                double q = (double) child->val /  child->count;
+                double q_rave = (double) child->rave_val /  child->rave_count;
+                double beta_ = beta(child->count, child->rave_count);
 				if (parent->color == color)
-					v[i] = parent->child[i]->count == 0 ? 1e308 : (1 - beta_) * q + beta_ * q_rave + pow(2 * log10(total) / parent->child[i]->count, 0.5);
+					v[i] = child->count == 0 ? 1e308 : (1 - beta_) * q + beta_ * q_rave + pow(2 * log10(total) / child->count, 0.5);
 				else
-					v[i] = parent->child[i]->count == 0 ? 0 : (1 - beta_) * q + beta_ * q_rave + pow(2 * log10(total) / parent->child[i]->count, 0.5);
+					v[i] = child->count == 0 ? 0 : (1 - beta_) * q + beta_ * q_rave + pow(2 * log10(total) / child->count, 0.5);
 			} else
 				v[i] = parent->color == color ? -1 : 1.2e308;
 		}
@@ -225,14 +233,13 @@ public:
 		node_t *p = selectNode[last];
         if (!isEndBoard) {
 		    p->isLeaf = false;
+            board::piece_type child_color = p->color == board::piece_type::black ? board::piece_type::white : board::piece_type::black;
     		for (int i = 0; i < CHILDNODESIZE; ++i) {
 	    		p->child[i] = (node_t *) malloc (sizeof(node_t));
-		    	p->child[i]->isLeaf = true;
-			    if (p->color == board::piece_type::black)
-				    p->child[i]->color = board::piece_type::white;
-    			else
-	    			p->child[i]->color = board::piece_type::black;
-		    	p->child[i]->count = p->child[i]->val = p->child[i]->rave_count = p->child[i]->rave_val = 0;
+                node_t *child = p->child[i];
+		    	child->isLeaf = true;
+	    		child->color = child_color;
+		    	child->count = child->val = child->rave_count = child->rave_val = 0;
     		}   
         }
 		for (int i = last; i >= 0; --i) {
