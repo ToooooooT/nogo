@@ -55,7 +55,7 @@ public:
 	typedef uint64_t score;
 	typedef int reward;
     void change_turn () {
-        attr.who_take_turns = attr.who_take_turns == board::piece_type::black ? attr.who_take_turns = board::piece_type::white : attr.who_take_turns = board::piece_type::black;
+        attr.who_take_turns = attr.who_take_turns == board::piece_type::black ? board::piece_type::white : board::piece_type::black;
     }
 
 public:
