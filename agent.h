@@ -132,7 +132,6 @@ public:
 				playOneSequence(root, state);
                 //printf("%d\n", i);
             }
-
             
             std::vector<int> indexs;
             for (int i = 0; i < CHILDNODESIZE; ++i)
@@ -193,7 +192,6 @@ public:
 			} else
 				v[i] = parent->color == color ? -1 : 1.2e308;
 		}
-
 
         std::vector<int> indexs;
         for (int i = 0; i < CHILDNODESIZE; ++i)
@@ -292,10 +290,7 @@ public:
 			}
 			if (!flag)
 				break;
-			if (present_color == board::piece_type::white)
-				present_color = board::piece_type::black; 
-			else
-				present_color = board::piece_type::white; 
+			present_color = present_color == board::piece_type::white ? board::piece_type::black : board::piece_type::white; 
             presentBoard.change_turn();
 		}
         indexs.clear();
