@@ -124,19 +124,19 @@ public:
             if (!flag)
                 return action();
 
+            std::vector<int> indexs;
+            for (int i = 0; i < CHILDNODESIZE; ++i)
+                indexs.push_back(i);
+            std::shuffle(indexs.begin(), indexs.end(), engine);
+
 			node_t *root = (node_t *) malloc (sizeof(node_t));
 			root->isLeaf = true;
 			root->count = root->rave_count = root->val = root->rave_val = 0;
 			root->color = who;
 			for (int i = 0; i < simulation_times; ++i) {
-				playOneSequence(root, state);
+				playOneSequence(root, state, indexs);
                 //printf("%d\n", i);
             }
-            
-            std::vector<int> indexs;
-            for (int i = 0; i < CHILDNODESIZE; ++i)
-                indexs.push_back(i);
-            std::shuffle(indexs.begin(), indexs.end(), engine);
 
 			int index = 0;
             while (root->child[indexs[index]]->count == 0)
@@ -179,7 +179,7 @@ public:
 		return flag == "black" ? 1u : 2u;
 	}
 
-	node_t *select (node_t *parent, board& presentBoard, board::piece_type color, int move[CHILDNODESIZE + 1], int step) {
+	node_t *select (node_t *parent, board& presentBoard, board::piece_type color, int move[CHILDNODESIZE + 1], int step, std::vector<int> indexs) {
 		int total = 0;
 		double v[CHILDNODESIZE] = {0.0};
 		for (int i = 0; i < CHILDNODESIZE; ++i)
@@ -200,9 +200,6 @@ public:
 				v[i] = parent->color == color ? -1 : 1.2e308;
 		}
 
-        std::vector<int> indexs;
-        for (int i = 0; i < CHILDNODESIZE; ++i)
-            indexs.push_back(i);
         std::shuffle(indexs.begin(), indexs.end(), engine);
 
 		int i = 0;
@@ -215,7 +212,6 @@ public:
 		presentBoard.setBoard(indexs[i], parent->color);
 
         int tmp = indexs[i];
-        indexs.clear();
         move[step] = tmp;
 
         // change turn
@@ -224,7 +220,7 @@ public:
 		return parent->child[tmp];
 	}
 
-	void updateValue (node_t *selectNode[CHILDNODESIZE], int value, int last, bool isEndBoard, int move[CHILDNODESIZE + 1]) {
+	inline void updateValue (node_t *selectNode[CHILDNODESIZE], int value, int last, bool isEndBoard, int move[CHILDNODESIZE + 1]) {
 		node_t *p = selectNode[last];
         if (!isEndBoard) {
 		    p->isLeaf = false;
@@ -262,24 +258,20 @@ public:
         return true;
     }
 
-	void playOneSequence (node_t *rootNode, board presentBoard) {
+	inline void playOneSequence (node_t *rootNode, board presentBoard, std::vector<int> indexs) {
 		node_t *selectNode[CHILDNODESIZE] = {NULL};
 		selectNode[0] = rootNode;
 		int i = 0;
         int move[CHILDNODESIZE + 1];
 		while (!(selectNode[i]->isLeaf)) {
-			selectNode[i + 1] = select(selectNode[i], presentBoard, who, move, i);
+			selectNode[i + 1] = select(selectNode[i], presentBoard, who, move, i, indexs);
 			i++;
 		}
-		int value = simulation(presentBoard, selectNode[i]->color, who);
+		int value = simulation(presentBoard, selectNode[i]->color, who, indexs);
 		updateValue(selectNode, value, i, isEndBoard(presentBoard, selectNode[i]->color), move);
 	}
 
-	int simulation (board presentBoard, board::piece_type present_color, board::piece_type true_color) {
-        std::vector<int> indexs;
-        for (int i = 0; i < CHILDNODESIZE; ++i)
-            indexs.push_back(i);
-
+	int simulation (board presentBoard, board::piece_type present_color, board::piece_type true_color, std::vector<int> indexs) {
 		while (1) {
 			bool flag = false;
             std::shuffle(indexs.begin(), indexs.end(), engine);
@@ -297,7 +289,6 @@ public:
 			present_color = present_color == board::piece_type::white ? board::piece_type::black : board::piece_type::white; 
             presentBoard.change_turn();
 		}
-        indexs.clear();
 		if (present_color == true_color)
 			return 0;
 		return 1;
