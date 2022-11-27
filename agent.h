@@ -148,8 +148,10 @@ public:
 			int index = 0;
             while (!(root->child[indexs[index]]->count))
                 index += 1;
-			for (int i = index + 1; i < CHILDNODESIZE; ++i) {
+	    for (int i = index + 1; i < CHILDNODESIZE; ++i) {
                 int count = root->child[indexs[i]]->count;
+		if (!count)
+			continue;
                 int value = root->child[indexs[i]]->val[count - 1];
                 int max_count = root->child[indexs[index]]->count;
                 int max_value = root->child[indexs[index]]->val[max_count - 1];
@@ -261,7 +263,7 @@ public:
 				    p->child[i]->color = board::piece_type::white;
     			else
 	    			p->child[i]->color = board::piece_type::black;
-		    	p->child[i]->count = 0;
+		    	p->child[i]->count = p->child[i]->rave_count = 0;
     		}   
         }
 		for (int i = last; i >= 0; --i) {
