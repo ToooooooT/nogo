@@ -102,8 +102,7 @@ public:
 	}
 
     double beta (int count, int rave_count) {
-        return 0;
-        //return rave_count / (rave_count + count + 4 * (double) rave_count * (double) count * pow((_b), 2));
+        return rave_count / (rave_count + count + 4 * (double) rave_count * (double) count * pow((_b), 2));
     }
 
 	virtual action take_action(const board& state) {
@@ -207,10 +206,6 @@ public:
         std::shuffle(indexs.begin(), indexs.end(), engine);
 
 		int i = 0;
-        while (parent->color == color && v[indexs[i]] == -1.0)
-            i += 1;
-        while (parent->color != color && v[indexs[i]] == 1.2e308)
-            i += 1;
 		for (int j = i + 1; j < CHILDNODESIZE; ++j) {
 			if (parent->color == color)
 				i = v[indexs[j]] > v[indexs[i]] ? j : i;
@@ -243,14 +238,16 @@ public:
     		}   
         }
 		for (int i = last; i >= 0; --i) {
-            for (int j = i + 1; j < last; ++j) {
+            for (int j = i + 2; j < last; j += 2) {
                 selectNode[i]->child[move[j]]->rave_val += value;
                 selectNode[i]->child[move[j]]->rave_count += 1;
             }
 			selectNode[i]->val += value;
 			selectNode[i]->count += 1;
-			selectNode[i]->rave_val += value;
-			selectNode[i]->rave_count += 1;
+            if (!((last - i) & 0x1)) {
+			    selectNode[i]->rave_val += value;
+    			selectNode[i]->rave_count += 1;
+            }
 		}
 	}
 
