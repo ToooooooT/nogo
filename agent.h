@@ -8,6 +8,7 @@
  */
 
 #pragma once
+#include <cstring>
 #include <string>
 #include <random>
 #include <sstream>
@@ -22,6 +23,7 @@
 
 #define CHILDNODESIZE 81
 #define _b 0.025
+#define COLLECTNODESIZE 15000
 
 class agent {
 public:
@@ -99,19 +101,15 @@ public:
 
         srand(time(NULL));
 
-        /*
         if (search() == "MCTS")
             simulation_times = stoi(sim_time());
-        */
-        simulation_times = 100;
 
         for (int i = 0; i < CHILDNODESIZE; ++i)
             indexs.push_back(i);
 	}
 
     double beta (int count, int rave_count) {
-		return 0;
-	    // return rave_count / (rave_count + count + 4 * (double) rave_count * (double) count * pow((_b), 2));
+	    return rave_count / (rave_count + count + 4 * (double) rave_count * (double) count * pow((_b), 2));
     }
 
 	virtual action take_action(const board& state) {
@@ -133,9 +131,14 @@ public:
             if (!flag)
                 return action();
 
+			collectNode = (node_t *) malloc(sizeof(node_t) * COLLECTNODESIZE);
+			memset(collectNode, 0, sizeof(node_t) * COLLECTNODESIZE);
+			nodeCount = 0;
+
             std::shuffle(indexs.begin(), indexs.end(), engine);
 
-			node_t *root = (node_t *) malloc (sizeof(node_t));
+			node_t *root = collectNode + nodeCount;
+			nodeCount += 1;
             root->val = root->rave_val = simulation(state, who, who, indexs);
 			root->count = root->rave_count = 1;
 			root->color = who;
@@ -166,7 +169,7 @@ public:
                 }
             }
 
-            free_tree(root);
+            free(collectNode);
 
             /*
             board::grid stone = board(state).getStone();
@@ -247,7 +250,8 @@ public:
 			curNode = curNode->child[move[i]];
 		}
         if (!isEndBoard) {
-		    lastNode->child[move[last - 1]] = (node_t *) malloc (sizeof(node_t));
+		    lastNode->child[move[last - 1]] = collectNode + nodeCount;
+			nodeCount += 1;
 			node_t *p = lastNode->child[move[last - 1]];
 			p->color = lastNode->color == board::piece_type::black ? board::piece_type::white : board::piece_type::black;
 			p->val = p->rave_val = value;
@@ -256,19 +260,6 @@ public:
 		}
 	}
     
-    /*
-    bool isEndBoard (board presentBoard, board::piece_type color) {
-        for (int i = 0; i < CHILDNODESIZE; ++i) {
-				board after = presentBoard;
-				if (action::place(i, color).apply(after) == board::legal) {
-					presentBoard.setBoard(i, color);
-                    return false;
-				}
-		}
-        return true;
-    }
-    */
-
 	inline void playOneSequence (node_t *rootNode, board presentBoard, std::vector<int> indexs) {
 		int i = 0;
         int move[CHILDNODESIZE + 1] = {0};
@@ -306,14 +297,6 @@ public:
 		return 1;
 	}
 
-    void free_tree (node_t *root) {
-		for (int i = 0; i < CHILDNODESIZE; ++i) {
-            if (root->child[i])
-    			free_tree(root->child[i]);
-        }
-		free(root);
-    }
-
     void show_board (board::grid stone) {
         for (int i = 0; i < 9; ++i) {
                 for (int j = 0; j < 9; ++j) {
@@ -329,4 +312,6 @@ private:
 	board::piece_type who;
     int simulation_times;
     std::vector<int> indexs;
+	node_t *collectNode;
+	int nodeCount;
 };
