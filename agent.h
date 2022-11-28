@@ -16,6 +16,7 @@
 #include <type_traits>
 #include <algorithm>
 #include <fstream>
+#include <ctime>
 #include <time.h>
 #include <stdlib.h>
 #include "board.h"
@@ -143,10 +144,9 @@ public:
 			root->count = root->rave_count = 1;
 			root->color = who;
             memset(root->child, 0, CHILDNODESIZE * sizeof(node_t *));
-			for (int i = 0; i < simulation_times; ++i) {
+			clock_t start = clock();
+			while (clock() - start < 900000)
 				playOneSequence(root, state, indexs);
-                //printf("%d\n", i);
-            }
 
 			int index = 0;
             while (!(root->child[indexs[index]]))
@@ -201,7 +201,7 @@ public:
 		}
 
 		double max = parent->color == color ? -1 : 1.2e308;
-        int max_op;
+        int max_op = 0;
         bool isEndBoard = true;
 		for (int i = 0; i < CHILDNODESIZE; ++i) {
 			board after = presentBoard;
