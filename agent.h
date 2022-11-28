@@ -96,9 +96,14 @@ public:
 			throw std::invalid_argument("invalid role: " + role());
 		for (size_t i = 0; i < space.size(); i++)
 			space[i] = action::place(i, who);
+
         srand(time(NULL));
+
         if (search() == "MCTS")
             simulation_times = stoi(sim_time());
+
+        for (int i = 0; i < CHILDNODESIZE; ++i)
+            indexs.push_back(i);
 	}
 
     double beta (int count, int rave_count) {
@@ -124,22 +129,20 @@ public:
             if (!flag)
                 return action();
 
-            std::vector<int> indexs;
-            for (int i = 0; i < CHILDNODESIZE; ++i)
-                indexs.push_back(i);
             std::shuffle(indexs.begin(), indexs.end(), engine);
 
 			node_t *root = (node_t *) malloc (sizeof(node_t));
-			root->isLeaf = true;
-			root->count = root->rave_count = root->val = root->rave_val = 0;
+            root->val = root->rave_val = simulation(state, who, who, indexs);
+			root->count = root->rave_count = 1;
 			root->color = who;
+            memset(root->child, 0, CHILDNODESIZE * sizeof(node_t *));
 			for (int i = 0; i < simulation_times; ++i) {
 				playOneSequence(root, state, indexs);
                 //printf("%d\n", i);
             }
 
 			int index = 0;
-            while (root->child[indexs[index]]->count == 0)
+            while (!(root->child[indexs[index]]))
                 index += 1;
             node_t *p = root->child[indexs[index]];
             double max_q = (double) p->val /  p->count;
@@ -148,7 +151,7 @@ public:
             double max = (1 - max_beta_) * max_q + max_beta_ * max_q_rave;
 			for (int i = index + 1; i < CHILDNODESIZE; ++i) {
                 node_t *cur = root->child[indexs[i]];
-                if (cur->count != 0) {
+                if (cur) {
                     double q = (double) cur->val /  cur->count;
                     double q_rave = (double) cur->rave_val /  cur->rave_count;
                     double beta_ = beta(cur->count, cur->rave_count);
@@ -167,10 +170,7 @@ public:
             printf("move index: %d\n", indexs[index]);
             */
 
-            int tmp = indexs[index];
-            indexs.clear();
-
-			return action::place(tmp, who);
+			return action::place(indexs[index], who);
 		}
 		return action();
 	}
@@ -179,11 +179,20 @@ public:
 		return flag == "black" ? 1u : 2u;
 	}
 
-	node_t *select (node_t *parent, board& presentBoard, board::piece_type color, int move[CHILDNODESIZE + 1], int step, std::vector<int> indexs) {
+	void select (node_t *parent, board& presentBoard, board::piece_type color, int move[CHILDNODESIZE + 1], int step, std::vector<int> indexs) {
 		int total = 0;
 		double v[CHILDNODESIZE] = {0.0};
-		for (int i = 0; i < CHILDNODESIZE; ++i)
-			total += parent->child[i]->count;
+        std::shuffle(indexs.begin(), indexs.end(), engine);
+		for (int i = 0; i < CHILDNODESIZE; ++i) {
+			board after = presentBoard;
+			if (!(parent->child[indexs[i]]) && action::place(indexs[i], parent->color).apply(after) == board::legal) {
+				move[step] = indexs[i];
+				presentBoard.setBoard(indexs[i], parent->color);
+        		presentBoard.change_turn();
+				return;
+			} else if (parent->child[indexs[i]])
+				total += parent->child[indexs[i]]->count;
+		}
 
 		for (int i = 0; i < CHILDNODESIZE; ++i) {
 			board after = presentBoard;
@@ -192,15 +201,10 @@ public:
                 double q = (double) child->val /  child->count;
                 double q_rave = (double) child->rave_val /  child->rave_count;
                 double beta_ = beta(child->count, child->rave_count);
-				if (parent->color == color)
-					v[i] = child->count == 0 ? 1e308 : (1 - beta_) * q + beta_ * q_rave + pow(2 * log10(total) / child->count, 0.5);
-				else
-					v[i] = child->count == 0 ? 0 : (1 - beta_) * q + beta_ * q_rave + pow(2 * log10(total) / child->count, 0.5);
+				v[i] = (1 - beta_) * q + beta_ * q_rave + pow(2 * log10(total) / child->count, 0.5);
 			} else
 				v[i] = parent->color == color ? -1 : 1.2e308;
 		}
-
-        std::shuffle(indexs.begin(), indexs.end(), engine);
 
 		int i = 0;
 		for (int j = i + 1; j < CHILDNODESIZE; ++j) {
@@ -216,35 +220,26 @@ public:
 
         // change turn
         presentBoard.change_turn();
-
-		return parent->child[tmp];
 	}
 
-	inline void updateValue (node_t *selectNode[CHILDNODESIZE], int value, int last, bool isEndBoard, int move[CHILDNODESIZE + 1]) {
-		node_t *p = selectNode[last];
-        if (!isEndBoard) {
-		    p->isLeaf = false;
-            board::piece_type child_color = p->color == board::piece_type::black ? board::piece_type::white : board::piece_type::black;
-    		for (int i = 0; i < CHILDNODESIZE; ++i) {
-	    		p->child[i] = (node_t *) malloc (sizeof(node_t));
-                node_t *child = p->child[i];
-		    	child->isLeaf = true;
-	    		child->color = child_color;
-		    	child->count = child->val = child->rave_count = child->rave_val = 0;
-    		}   
-        }
-		for (int i = last; i >= 0; --i) {
+	inline void updateValue (node_t *rootNode, int value, int last, bool isEndBoard, int move[CHILDNODESIZE + 1]) {
+		node_t *curNode = rootNode, *lastNode = NULL;
+		for (int i = 0; i < last; ++i) {
             for (int j = i + 2; j < last; j += 2) {
-                selectNode[i]->child[move[j]]->rave_val += value;
-                selectNode[i]->child[move[j]]->rave_count += 1;
+                curNode->child[move[j]]->rave_val += value;
+                curNode->child[move[j]]->rave_count += 1;
             }
-			selectNode[i]->val += value;
-			selectNode[i]->count += 1;
-            if (!((last - i) & 0x1)) {
-			    selectNode[i]->rave_val += value;
-    			selectNode[i]->rave_count += 1;
-            }
+			curNode->val += value;
+			curNode->count += 1;
+			lastNode = curNode;
+			curNode = curNode->child[move[i]];
 		}
+		lastNode->child[move[last - 1]] = (node_t *) malloc (sizeof(node_t));
+		node_t *p = lastNode->child[move[last - 1]];
+		p->color = lastNode->color == board::piece_type::black ? board::piece_type::white : board::piece_type::black;
+		p->val = p->rave_val = value;
+		p->count = p->rave_count = 1;
+		memset(p->child, 0, CHILDNODESIZE * sizeof(node_t *));
 	}
 
     bool isEndBoard (board presentBoard, board::piece_type color) {
@@ -259,16 +254,16 @@ public:
     }
 
 	inline void playOneSequence (node_t *rootNode, board presentBoard, std::vector<int> indexs) {
-		node_t *selectNode[CHILDNODESIZE] = {NULL};
-		selectNode[0] = rootNode;
 		int i = 0;
         int move[CHILDNODESIZE + 1];
-		while (!(selectNode[i]->isLeaf)) {
-			selectNode[i + 1] = select(selectNode[i], presentBoard, who, move, i, indexs);
+		node_t *curNode = rootNode;
+		while (curNode && !isEndBoard(presentBoard, presentBoard.getWhoTakeTurns())) {
+			select(curNode, presentBoard, who, move, i, indexs);
+			curNode = curNode->child[move[i]];
 			i++;
 		}
-		int value = simulation(presentBoard, selectNode[i]->color, who, indexs);
-		updateValue(selectNode, value, i, isEndBoard(presentBoard, selectNode[i]->color), move);
+		int value = simulation(presentBoard, presentBoard.getWhoTakeTurns(), who, indexs);
+		updateValue(rootNode, value, i, isEndBoard(presentBoard, presentBoard.getWhoTakeTurns()), move);
 	}
 
 	int simulation (board presentBoard, board::piece_type present_color, board::piece_type true_color, std::vector<int> indexs) {
@@ -295,12 +290,11 @@ public:
 	}
 
     void free_tree (node_t *root) {
-        if (root->isLeaf)
-            free(root);
-        else {
-            for (int i = 0; i < CHILDNODESIZE; ++i)
-                free_tree(root->child[i]);
-        }
+		if (!root)
+			return;
+		for (int i = 0; i < CHILDNODESIZE; ++i)
+			free_tree(root->child[i]);
+		free(root);
     }
 
     void show_board (board::grid stone) {
@@ -317,4 +311,5 @@ private:
 	std::vector<action::place> space;
 	board::piece_type who;
     int simulation_times;
+    std::vector<int> indexs;
 };

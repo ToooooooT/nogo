@@ -224,8 +224,8 @@ public:
 		return stone;
 	}
 
-	data getAttr() {
-		return attr;
+	board::piece_type getWhoTakeTurns() {
+		return attr.who_take_turns;
 	}
 
 public:
