@@ -99,15 +99,19 @@ public:
 
         srand(time(NULL));
 
+        /*
         if (search() == "MCTS")
             simulation_times = stoi(sim_time());
+        */
+        simulation_times = 100;
 
         for (int i = 0; i < CHILDNODESIZE; ++i)
             indexs.push_back(i);
 	}
 
     double beta (int count, int rave_count) {
-        return rave_count / (rave_count + count + 4 * (double) rave_count * (double) count * pow((_b), 2));
+		return 0;
+	    // return rave_count / (rave_count + count + 4 * (double) rave_count * (double) count * pow((_b), 2));
     }
 
 	virtual action take_action(const board& state) {
@@ -179,9 +183,8 @@ public:
 		return flag == "black" ? 1u : 2u;
 	}
 
-	void select (node_t *parent, board& presentBoard, board::piece_type color, int move[CHILDNODESIZE + 1], int step, std::vector<int> indexs) {
+	bool select (node_t *parent, board& presentBoard, board::piece_type color, int move[CHILDNODESIZE + 1], int step, std::vector<int> indexs) {
 		int total = 0;
-		double v[CHILDNODESIZE] = {0.0};
         std::shuffle(indexs.begin(), indexs.end(), engine);
 		for (int i = 0; i < CHILDNODESIZE; ++i) {
 			board after = presentBoard;
@@ -189,41 +192,50 @@ public:
 				move[step] = indexs[i];
 				presentBoard.setBoard(indexs[i], parent->color);
         		presentBoard.change_turn();
-				return;
+				return false;
 			} else if (parent->child[indexs[i]])
 				total += parent->child[indexs[i]]->count;
 		}
 
+		double max = parent->color == color ? -1 : 1.2e308;
+        int max_op;
+        bool isEndBoard = true;
 		for (int i = 0; i < CHILDNODESIZE; ++i) {
 			board after = presentBoard;
-            node_t *child = parent->child[i];
-			if (action::place(i, parent->color).apply(after) == board::legal) {
+            node_t *child = parent->child[indexs[i]];
+			if (action::place(indexs[i], parent->color).apply(after) == board::legal) {
                 double q = (double) child->val /  child->count;
                 double q_rave = (double) child->rave_val /  child->rave_count;
                 double beta_ = beta(child->count, child->rave_count);
-				v[i] = (1 - beta_) * q + beta_ * q_rave + pow(2 * log10(total) / child->count, 0.5);
-			} else
-				v[i] = parent->color == color ? -1 : 1.2e308;
+                if (parent->color == color) {
+                    if ((1 - beta_) * q + beta_ * q_rave + pow(2 * log10(total) / child->count, 0.5) > max) {
+                        max = (1 - beta_) * q + beta_ * q_rave + pow(2 * log10(total) / child->count, 0.5);
+                        max_op = indexs[i];
+                    }
+                } else {
+                    if ((1 - beta_) * q + beta_ * q_rave + pow(2 * log10(total) / child->count, 0.5) < max) {
+                        max = (1 - beta_) * q + beta_ * q_rave + pow(2 * log10(total) / child->count, 0.5);
+                        max_op = indexs[i];
+                    }
+
+                }
+                isEndBoard = false;
+			}
 		}
 
-		int i = 0;
-		for (int j = i + 1; j < CHILDNODESIZE; ++j) {
-			if (parent->color == color)
-				i = v[indexs[j]] > v[indexs[i]] ? j : i;
-			else
-				i = v[indexs[j]] < v[indexs[i]] ? j : i;
-		}
-		presentBoard.setBoard(indexs[i], parent->color);
+        if (isEndBoard)
+            return true;
 
-        int tmp = indexs[i];
-        move[step] = tmp;
-
+		presentBoard.setBoard(max_op, parent->color);
+        move[step] = max_op;
         // change turn
         presentBoard.change_turn();
+        return false;
 	}
 
 	inline void updateValue (node_t *rootNode, int value, int last, bool isEndBoard, int move[CHILDNODESIZE + 1]) {
 		node_t *curNode = rootNode, *lastNode = NULL;
+		last -= isEndBoard;
 		for (int i = 0; i < last; ++i) {
             for (int j = i + 2; j < last; j += 2) {
                 curNode->child[move[j]]->rave_val += value;
@@ -234,14 +246,17 @@ public:
 			lastNode = curNode;
 			curNode = curNode->child[move[i]];
 		}
-		lastNode->child[move[last - 1]] = (node_t *) malloc (sizeof(node_t));
-		node_t *p = lastNode->child[move[last - 1]];
-		p->color = lastNode->color == board::piece_type::black ? board::piece_type::white : board::piece_type::black;
-		p->val = p->rave_val = value;
-		p->count = p->rave_count = 1;
-		memset(p->child, 0, CHILDNODESIZE * sizeof(node_t *));
+        if (!isEndBoard) {
+		    lastNode->child[move[last - 1]] = (node_t *) malloc (sizeof(node_t));
+			node_t *p = lastNode->child[move[last - 1]];
+			p->color = lastNode->color == board::piece_type::black ? board::piece_type::white : board::piece_type::black;
+			p->val = p->rave_val = value;
+			p->count = p->rave_count = 1;
+			memset(p->child, 0, CHILDNODESIZE * sizeof(node_t *));
+		}
 	}
-
+    
+    /*
     bool isEndBoard (board presentBoard, board::piece_type color) {
         for (int i = 0; i < CHILDNODESIZE; ++i) {
 				board after = presentBoard;
@@ -252,18 +267,20 @@ public:
 		}
         return true;
     }
+    */
 
 	inline void playOneSequence (node_t *rootNode, board presentBoard, std::vector<int> indexs) {
 		int i = 0;
-        int move[CHILDNODESIZE + 1];
+        int move[CHILDNODESIZE + 1] = {0};
 		node_t *curNode = rootNode;
-		while (curNode && !isEndBoard(presentBoard, presentBoard.getWhoTakeTurns())) {
-			select(curNode, presentBoard, who, move, i, indexs);
+        bool isEndBoard = false;
+		while (curNode && !isEndBoard) {
+			isEndBoard = select(curNode, presentBoard, who, move, i, indexs);
 			curNode = curNode->child[move[i]];
 			i++;
 		}
 		int value = simulation(presentBoard, presentBoard.getWhoTakeTurns(), who, indexs);
-		updateValue(rootNode, value, i, isEndBoard(presentBoard, presentBoard.getWhoTakeTurns()), move);
+		updateValue(rootNode, value, i, isEndBoard, move);
 	}
 
 	int simulation (board presentBoard, board::piece_type present_color, board::piece_type true_color, std::vector<int> indexs) {
@@ -281,7 +298,7 @@ public:
 			}
 			if (!flag)
 				break;
-			present_color = present_color == board::piece_type::white ? board::piece_type::black : board::piece_type::white; 
+			present_color = present_color == board::piece_type::black ? board::piece_type::white : board::piece_type::black;
             presentBoard.change_turn();
 		}
 		if (present_color == true_color)
@@ -290,10 +307,10 @@ public:
 	}
 
     void free_tree (node_t *root) {
-		if (!root)
-			return;
-		for (int i = 0; i < CHILDNODESIZE; ++i)
-			free_tree(root->child[i]);
+		for (int i = 0; i < CHILDNODESIZE; ++i) {
+            if (root->child[i])
+    			free_tree(root->child[i]);
+        }
 		free(root);
     }
 
