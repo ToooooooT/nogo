@@ -107,6 +107,9 @@ public:
 
         for (int i = 0; i < CHILDNODESIZE; ++i)
             indexs.push_back(i);
+		
+		collectNode = (node_t *) malloc(sizeof(node_t) * COLLECTNODESIZE);
+		memset(collectNode, 0, sizeof(node_t) * COLLECTNODESIZE);
 	}
 
     double beta (int count, int rave_count) {
@@ -132,20 +135,15 @@ public:
             if (!flag)
                 return action();
 
-			collectNode = (node_t *) malloc(sizeof(node_t) * COLLECTNODESIZE);
-			memset(collectNode, 0, sizeof(node_t) * COLLECTNODESIZE);
 			nodeCount = 0;
 
             std::shuffle(indexs.begin(), indexs.end(), engine);
 
 			node_t *root = collectNode + nodeCount;
 			nodeCount += 1;
-            root->val = root->rave_val = simulation(state, who, who, indexs);
-			root->count = root->rave_count = 1;
 			root->color = who;
             memset(root->child, 0, CHILDNODESIZE * sizeof(node_t *));
-			clock_t start;
-			start = clock();
+			clock_t start = clock();
 			while (clock() - start < 990000)
 				playOneSequence(root, state, indexs);
 
@@ -170,21 +168,9 @@ public:
                 }
             }
 
-            free(collectNode);
-
-            /*
-            board::grid stone = board(state).getStone();
-            show_board(stone);
-            printf("move index: %d\n", indexs[index]);
-            */
-
 			return action::place(indexs[index], who);
 		}
 		return action();
-	}
-
-	unsigned my_close_episode(const std::string& flag = "") {
-		return flag == "black" ? 1u : 2u;
 	}
 
 	bool select (node_t *parent, board& presentBoard, board::piece_type color, int move[CHILDNODESIZE + 1], int step, std::vector<int> indexs) {
@@ -217,7 +203,7 @@ public:
                         max_op = indexs[i];
                     }
                 } else {
-                    if ((1 - beta_) * q + beta_ * q_rave + pow(2 * log10(total) / child->count, 0.5) < max) {
+                    if ((1 - beta_) * q + beta_ * q_rave - pow(2 * log10(total) / child->count, 0.5) < max) {
                         max = (1 - beta_) * q + beta_ * q_rave + pow(2 * log10(total) / child->count, 0.5);
                         max_op = indexs[i];
                     }
@@ -295,16 +281,6 @@ public:
 		}
 		return present_color != true_color;
 	}
-
-    void show_board (board::grid stone) {
-        for (int i = 0; i < 9; ++i) {
-                for (int j = 0; j < 9; ++j) {
-                    printf("%u ", stone[i][j]);
-                }
-                printf("\n");
-        }
-        printf("\n\n");
-    }
 
 private:
 	std::vector<action::place> space;
