@@ -113,7 +113,7 @@ public:
 	}
 
     float beta (int count, int rave_count) {
-	    return rave_count / (rave_count + count + 4 * (float) rave_count * (float) count * pow((_b), 2));
+	    return (float) rave_count / ((float) rave_count + (float) count + 4 * (float) rave_count * (float) count * pow((_b), 2));
     }
 
 	virtual action take_action(const board& state) {
@@ -144,17 +144,16 @@ public:
 			root->color = who;
             memset(root->child, 0, CHILDNODESIZE * sizeof(node_t *));
 			clock_t start = clock();
-			int sim_cnt = 0;
-			while (clock() - start < 990000) {
+			while (clock() - start < 990000)
 				playOneSequence(root, state, indexs);
-				sim_cnt += 1;
-			}
-			printf("%d\n", sim_cnt);
 
 			int index = 0;
             while (!(root->child[indexs[index]]))
                 index += 1;
             node_t *p = root->child[indexs[index]];
+			root->count = root->rave_count = 0;
+			// root node value is don't care
+			root->val = root->rave_val = 1;
             float max_q = (float) p->val /  p->count;
             float max_q_rave = (float) p->rave_val / p->rave_count;
             float max_beta_ = beta(p->count, p->rave_count);
@@ -196,17 +195,10 @@ public:
                 float q = (float) child->val /  child->count;
                 float q_rave = (float) child->rave_val /  child->rave_count;
                 float beta_ = beta(child->count, child->rave_count);
-                if (parent->color == color) {
-                    if ((1 - beta_) * q + beta_ * q_rave + pow(2 * log10(total) / child->count, 0.5) > max) {
-                        max = (1 - beta_) * q + beta_ * q_rave + pow(2 * log10(total) / child->count, 0.5);
-                        max_op = indexs[i];
-                    }
-                } else {
-                    if ((1 - beta_) * q + beta_ * q_rave - pow(2 * log10(total) / child->count, 0.5) < max) {
-                        max = (1 - beta_) * q + beta_ * q_rave + pow(2 * log10(total) / child->count, 0.5);
-                        max_op = indexs[i];
-                    }
-
+				float value = (1 - beta_) * q + beta_ * q_rave + pow(2 * log10(total) / child->count, 0.5);
+                if ((parent->color == color && value > max) || (value < max)) {
+                    max = value;
+                    max_op = indexs[i];
                 }
 			}
 		}
