@@ -144,8 +144,9 @@ public:
 			root->count = root->rave_count = 1;
 			root->color = who;
             memset(root->child, 0, CHILDNODESIZE * sizeof(node_t *));
-			clock_t start = clock();
-			while (clock() - start < 900000)
+			clock_t start;
+			start = clock();
+			while (clock() - start < 990000)
 				playOneSequence(root, state, indexs);
 
 			int index = 0;
@@ -270,7 +271,7 @@ public:
 			curNode = curNode->child[move[i]];
 			i++;
 		}
-		int value = simulation(presentBoard, presentBoard.getWhoTakeTurns(), who, indexs);
+		int value = isEndBoard ? presentBoard.getWhoTakeTurns() != who : simulation(presentBoard, presentBoard.getWhoTakeTurns(), who, indexs);
 		updateValue(rootNode, value, i, isEndBoard, move);
 	}
 
@@ -292,9 +293,7 @@ public:
 			present_color = present_color == board::piece_type::black ? board::piece_type::white : board::piece_type::black;
             presentBoard.change_turn();
 		}
-		if (present_color == true_color)
-			return 0;
-		return 1;
+		return present_color != true_color;
 	}
 
     void show_board (board::grid stone) {
