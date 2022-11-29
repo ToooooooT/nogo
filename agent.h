@@ -24,7 +24,7 @@
 
 #define CHILDNODESIZE 81
 #define _b 0.025
-#define COLLECTNODESIZE 15000
+#define COLLECTNODESIZE 50000
 
 class agent {
 public:
@@ -141,37 +141,33 @@ public:
 
 			node_t *root = collectNode + nodeCount;
 			nodeCount += 1;
+			// root node value is don't care
+			root->val = root->rave_val = 1;
+			root->count = root->rave_count = 0;
 			root->color = who;
             memset(root->child, 0, CHILDNODESIZE * sizeof(node_t *));
+
 			clock_t start = clock();
 			while (clock() - start < 990000)
 				playOneSequence(root, state, indexs);
 
 			int index = 0;
-            while (!(root->child[indexs[index]]))
-                index += 1;
-            node_t *p = root->child[indexs[index]];
-			root->count = root->rave_count = 0;
-			// root node value is don't care
-			root->val = root->rave_val = 1;
-            float max_q = (float) p->val /  p->count;
-            float max_q_rave = (float) p->rave_val / p->rave_count;
-            float max_beta_ = beta(p->count, p->rave_count);
-            float max = (1 - max_beta_) * max_q + max_beta_ * max_q_rave;
-			for (int i = index + 1; i < CHILDNODESIZE; ++i) {
+			float max = -1;
+			for (int i = 0; i < CHILDNODESIZE; ++i) {
                 node_t *cur = root->child[indexs[i]];
                 if (cur) {
                     float q = (float) cur->val /  cur->count;
                     float q_rave = (float) cur->rave_val /  cur->rave_count;
                     float beta_ = beta(cur->count, cur->rave_count);
-                    if ((1 - beta_) * q + beta_ * q_rave > max) {
-    				    index = i;
-                        max = (1 - beta_) * q + beta_ * q_rave;
+					float value = (1 - beta_) * q + beta_ * q_rave;
+                    if (value > max) {
+    				    index = indexs[i];
+                        max = value;
                     }
                 }
             }
 
-			return action::place(indexs[index], who);
+			return action::place(index, who);
 		}
 		return action();
 	}
