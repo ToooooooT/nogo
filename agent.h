@@ -112,8 +112,8 @@ public:
 		memset(collectNode, 0, sizeof(node_t) * COLLECTNODESIZE);
 	}
 
-    double beta (int count, int rave_count) {
-	    return rave_count / (rave_count + count + 4 * (double) rave_count * (double) count * pow((_b), 2));
+    float beta (int count, int rave_count) {
+	    return rave_count / (rave_count + count + 4 * (float) rave_count * (float) count * pow((_b), 2));
     }
 
 	virtual action take_action(const board& state) {
@@ -144,23 +144,27 @@ public:
 			root->color = who;
             memset(root->child, 0, CHILDNODESIZE * sizeof(node_t *));
 			clock_t start = clock();
-			while (clock() - start < 990000)
+			int sim_cnt = 0;
+			while (clock() - start < 990000) {
 				playOneSequence(root, state, indexs);
+				sim_cnt += 1;
+			}
+			printf("%d\n", sim_cnt);
 
 			int index = 0;
             while (!(root->child[indexs[index]]))
                 index += 1;
             node_t *p = root->child[indexs[index]];
-            double max_q = (double) p->val /  p->count;
-            double max_q_rave = (double) p->rave_val / p->rave_count;
-            double max_beta_ = beta(p->count, p->rave_count);
-            double max = (1 - max_beta_) * max_q + max_beta_ * max_q_rave;
+            float max_q = (float) p->val /  p->count;
+            float max_q_rave = (float) p->rave_val / p->rave_count;
+            float max_beta_ = beta(p->count, p->rave_count);
+            float max = (1 - max_beta_) * max_q + max_beta_ * max_q_rave;
 			for (int i = index + 1; i < CHILDNODESIZE; ++i) {
                 node_t *cur = root->child[indexs[i]];
                 if (cur) {
-                    double q = (double) cur->val /  cur->count;
-                    double q_rave = (double) cur->rave_val /  cur->rave_count;
-                    double beta_ = beta(cur->count, cur->rave_count);
+                    float q = (float) cur->val /  cur->count;
+                    float q_rave = (float) cur->rave_val /  cur->rave_count;
+                    float beta_ = beta(cur->count, cur->rave_count);
                     if ((1 - beta_) * q + beta_ * q_rave > max) {
     				    index = i;
                         max = (1 - beta_) * q + beta_ * q_rave;
@@ -174,29 +178,24 @@ public:
 	}
 
 	bool select (node_t *parent, board& presentBoard, board::piece_type color, int move[CHILDNODESIZE + 1], int step, std::vector<int> indexs) {
-		int total = 0;
+		int total = parent->count;
         std::shuffle(indexs.begin(), indexs.end(), engine);
-		for (int i = 0; i < CHILDNODESIZE; ++i) {
-			board after = presentBoard;
-			if (!(parent->child[indexs[i]]) && action::place(indexs[i], parent->color).apply(after) == board::legal) {
-				move[step] = indexs[i];
-				presentBoard.setBoard(indexs[i], parent->color);
-        		presentBoard.change_turn();
-				return false;
-			} else if (parent->child[indexs[i]])
-				total += parent->child[indexs[i]]->count;
-		}
 
-		double max = parent->color == color ? -1 : 1.2e308;
+		float max = parent->color == color ? -1 : 1.2e30;
         int max_op = 0;
         bool isEndBoard = true;
 		for (int i = 0; i < CHILDNODESIZE; ++i) {
 			board after = presentBoard;
             node_t *child = parent->child[indexs[i]];
 			if (action::place(indexs[i], parent->color).apply(after) == board::legal) {
-                double q = (double) child->val /  child->count;
-                double q_rave = (double) child->rave_val /  child->rave_count;
-                double beta_ = beta(child->count, child->rave_count);
+                isEndBoard = false;
+				if (!child) {
+					max_op = indexs[i];
+					break;
+				}
+                float q = (float) child->val /  child->count;
+                float q_rave = (float) child->rave_val /  child->rave_count;
+                float beta_ = beta(child->count, child->rave_count);
                 if (parent->color == color) {
                     if ((1 - beta_) * q + beta_ * q_rave + pow(2 * log10(total) / child->count, 0.5) > max) {
                         max = (1 - beta_) * q + beta_ * q_rave + pow(2 * log10(total) / child->count, 0.5);
@@ -209,7 +208,6 @@ public:
                     }
 
                 }
-                isEndBoard = false;
 			}
 		}
 
@@ -248,8 +246,7 @@ public:
 	}
     
 	inline void playOneSequence (node_t *rootNode, board presentBoard, std::vector<int> indexs) {
-		int i = 0;
-        int move[CHILDNODESIZE + 1] = {0};
+		int i = 0, move[CHILDNODESIZE + 1] = {0};
 		node_t *curNode = rootNode;
         bool isEndBoard = false;
 		while (curNode && !isEndBoard) {
