@@ -103,7 +103,7 @@ public:
         srand(time(NULL));
 
         if (search() == "MCTS")
-            simulation_times = stoi(sim_time());
+     		simulation_times = stoi(sim_time());
 
         for (int i = 0; i < CHILDNODESIZE; ++i)
             indexs.push_back(i);
@@ -180,9 +180,9 @@ public:
 		int total = parent->count;
         std::shuffle(indexs.begin(), indexs.end(), engine);
 
-		float max = parent->color == color ? -1 : 1.2e30;
+        bool isEndBoard = true, same_color = parent->color == color;
+		float max = same_color ? -1 : 1.2e30;
         int max_op = 0;
-        bool isEndBoard = true;
 		for (int i = 0; i < CHILDNODESIZE; ++i) {
 			board after = presentBoard;
             node_t *child = parent->child[indexs[i]];
@@ -195,8 +195,10 @@ public:
                 float q = (float) child->val /  child->count;
                 float q_rave = (float) child->rave_val /  child->rave_count;
                 float beta_ = beta(child->count, child->rave_count);
-				float value = (1 - beta_) * q + beta_ * q_rave + pow(2 * log10(total) / child->count, 0.5);
-                if ((parent->color == color && value > max) || (value < max)) {
+				float value = same_color ? \
+							(1 - beta_) * q + beta_ * q_rave + pow(2 * log10(total) / child->count, 0.5) : \
+							(1 - beta_) * q + beta_ * q_rave - pow(2 * log10(total) / child->count, 0.5);
+                if ((same_color && value > max) || ((!same_color) && value < max)) {
                     max = value;
                     max_op = indexs[i];
                 }
@@ -265,7 +267,7 @@ public:
 			}
 			if (!flag)
 				break;
-			present_color = present_color == board::piece_type::black ? board::piece_type::white : board::piece_type::black;
+			present_color = board::piece_type(3 - present_color);
             presentBoard.change_turn();
 		}
 		return present_color != true_color;
