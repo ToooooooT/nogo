@@ -24,7 +24,7 @@
 
 #define CHILDNODESIZE 81
 #define _b 0.025
-#define COLLECTNODESIZE 50000
+#define COLLECTNODESIZE 30000
 
 class agent {
 public:
@@ -228,7 +228,7 @@ public:
 		    lastNode->child[move[last - 1]] = collectNode + nodeCount;
 			nodeCount += 1;
 			node_t *p = lastNode->child[move[last - 1]];
-			p->color = lastNode->color == board::piece_type::black ? board::piece_type::white : board::piece_type::black;
+			p->color = board::piece_type(3 - lastNode->color);
 			p->val = p->rave_val = value;
 			p->count = p->rave_count = 1;
 			memset(p->child, 0, CHILDNODESIZE * sizeof(node_t *));
