@@ -30,7 +30,6 @@
 #define _b 0.025
 #define COLLECTNODESIZE 250000
 #define TREESIZE 50000
-#define NUMOFTHREAD 2
 
 class agent {
 public:
@@ -55,6 +54,7 @@ public:
 	virtual std::string role() const { return property("role"); }
 	virtual std::string search() const { return property("search"); }
 	virtual std::string sim_time() const { return property("simulation"); }
+	virtual std::string thread_count() const { return property("thread"); }
 
 protected:
 	typedef std::string key;
@@ -115,8 +115,10 @@ public:
 
         srand(time(NULL));
 
-        if (search() == "MCTS")
+        if (search() == "MCTS") {
      		simulation_times = stoi(sim_time());
+			thread_num = stoi(thread_count());
+		}
 		
 		collectNode = (node_t *) malloc(sizeof(node_t) * COLLECTNODESIZE);
 		memset(collectNode, 0, sizeof(node_t) * COLLECTNODESIZE);
@@ -146,19 +148,21 @@ public:
                 return action();
 
 			// use root parallel mcts
-			std::thread threads[NUMOFTHREAD];
-			func_para_t para[NUMOFTHREAD]; 
-			for (int i = 0; i < NUMOFTHREAD; ++i) {
+			std::thread threads[thread_num];
+			func_para_t para[thread_num]; 
+			for (int i = 0; i < thread_num; ++i) {
 				para[i].index_of_tree = i;
 				para[i].state = state;
 				threads[i] = std::thread(&player::child, this, para + i);
 			}
-			for (int i = 0; i < NUMOFTHREAD; ++i)
+			for (int i = 0; i < thread_num; ++i)
 				threads[i].join();
 
 			// compute the ucb of all child of each root
-			float values[CHILDNODESIZE] = {0};
-			for (int j = 0; j < NUMOFTHREAD; ++j) {
+			float values[CHILDNODESIZE];
+			for (int i = 0; i < CHILDNODESIZE; ++i)
+				values[i] = -1;
+			for (int j = 0; j < thread_num; ++j) {
 				node_t *root = collectNode + j * TREESIZE;
 				for (int i = 0; i < CHILDNODESIZE; ++i) {
 					node_t *cur = root->child[i];
@@ -175,6 +179,15 @@ public:
 			int index = 0;
 			for (int i = 1; i < CHILDNODESIZE; ++i)
 				index = values[i] > values[index] ? i : index;
+
+			// board after = state;
+			// if (action::place(index, who).apply(after) != board::legal) {
+			// 	after = state;
+			// 	printf("who: %d\n", after.getWhoTakeTurns());
+			// 	printf("thread num: %d\n", thread_num);
+			// }
+
+			memset(collectNode, 0, sizeof(node_t) * COLLECTNODESIZE);
 
 			return action::place(index, who);
 		}
@@ -296,9 +309,13 @@ public:
 		memset(root->child, 0, CHILDNODESIZE * sizeof(node_t *));
 
 		clock_t start = clock();
-		while (clock() - start < 980000)
+		long int interval = 1000000 * simulation_times;
+		int count = 0;
+		while (clock() - start < interval) {
 			playOneSequence(root, state, indexs, nodeCount, index_of_tree);
-		printf("index of tree: %d , root count: %d\n", index_of_tree, root->count);
+			count += 1;
+		}
+		printf("who: %d, index of tree: %d, simulation count: %d, time: %ld\n", who, index_of_tree, count, interval / CLOCKS_PER_SEC);
 	}
 
 	void child(void *arg) {
@@ -310,7 +327,7 @@ private:
 	std::vector<action::place> space;
 	board::piece_type who;
     int simulation_times;
-	// int nodeCount;
+	int thread_num;
 };
 
 
