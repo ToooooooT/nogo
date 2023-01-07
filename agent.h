@@ -30,7 +30,7 @@
 #define _b 0.025
 #define COLLECTNODESIZE 250000
 #define TREESIZE 50000
-#define NUMOFTHREAD 4
+#define NUMOFTHREAD 2
 
 class agent {
 public:
@@ -86,20 +86,22 @@ protected:
  * random player for both side
  * put a legal piece randomly
  */
+typedef struct node {
+	struct node *child[CHILDNODESIZE];
+	int count, val, rave_count, rave_val;
+	bool isLeaf;
+	board::piece_type color;
+} node_t;
+
+typedef struct func_para {
+	int index_of_tree;
+	board state;
+} func_para_t;
+
+node_t *collectNode;
+
 class player : public random_agent {
 public:
-	typedef struct node {
-		struct node *child[CHILDNODESIZE];
-		int count, val, rave_count, rave_val;
-		bool isLeaf;
-		board::piece_type color;
-	} node_t;
-
-	typedef struct func_para {
-		int index_of_tree;
-		board state;
-	} func_para_t;
-
 	player(const std::string& args = "") : random_agent("name=random role=unknown " + args),
 		space(board::size_x * board::size_y), who(board::empty) {
 		if (name().find_first_of("[]():; ") != std::string::npos)
@@ -145,17 +147,19 @@ public:
 
 			// use root parallel mcts
 			std::thread threads[NUMOFTHREAD];
+			func_para_t para[NUMOFTHREAD]; 
 			for (int i = 0; i < NUMOFTHREAD; ++i) {
-				func_para_t para1 = {i, state};
-				threads[i] = std::thread(&player::child, this, &para1);
+				para[i].index_of_tree = i;
+				para[i].state = state;
+				threads[i] = std::thread(&player::child, this, para + i);
 			}
 			for (int i = 0; i < NUMOFTHREAD; ++i)
 				threads[i].join();
 
 			// compute the ucb of all child of each root
 			float values[CHILDNODESIZE] = {0};
-			for (; q_roots.size() > 0; q_roots.pop()) {
-				node_t *root = q_roots.front();
+			for (int j = 0; j < NUMOFTHREAD; ++j) {
+				node_t *root = collectNode + j * TREESIZE;
 				for (int i = 0; i < CHILDNODESIZE; ++i) {
 					node_t *cur = root->child[i];
 					if (cur) {
@@ -226,6 +230,8 @@ public:
             }
 			curNode->val += value;
 			curNode->count += 1;
+			curNode->rave_val += value;
+			curNode->rave_count += 1;
 			lastNode = curNode;
 			curNode = curNode->child[move[i]];
 		}
@@ -274,14 +280,14 @@ public:
 		return present_color != true_color;
 	}
 
-	node_t *run_mcts (int index_of_tree, const board state) {
+	void run_mcts (int index_of_tree, const board state) {
 		int nodeCount = 0;
     	std::vector<int> indexs;
         for (int i = 0; i < CHILDNODESIZE; ++i)
             indexs.push_back(i);
 		std::shuffle(indexs.begin(), indexs.end(), engine);
 
-		node_t *root = collectNode + nodeCount + index_of_tree * TREESIZE;
+		node_t *root = collectNode + index_of_tree * TREESIZE;
 		nodeCount += 1;
 		// root node value is don't care
 		root->val = root->rave_val = 1;
@@ -292,23 +298,19 @@ public:
 		clock_t start = clock();
 		while (clock() - start < 980000)
 			playOneSequence(root, state, indexs, nodeCount, index_of_tree);
-
-		return root;
+		printf("index of tree: %d , root count: %d\n", index_of_tree, root->count);
 	}
 
 	void child(void *arg) {
 		func_para_t *para = (func_para_t *) arg;
-		node_t *root = player().run_mcts(para->index_of_tree, para->state);
-		q_roots.push(root);
+		run_mcts(para->index_of_tree, para->state);
 	}
 
 private:
 	std::vector<action::place> space;
 	board::piece_type who;
     int simulation_times;
-	node_t *collectNode;
 	// int nodeCount;
-	std::queue<node_t *> q_roots;
 };
 
 
