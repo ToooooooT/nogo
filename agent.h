@@ -21,10 +21,16 @@
 #include <stdlib.h>
 #include "board.h"
 #include "action.h"
+#include <stdio.h>
+#include <thread>
+#include <queue>
+#include <unistd.h>
 
 #define CHILDNODESIZE 81
 #define _b 0.025
-#define COLLECTNODESIZE 30000
+#define COLLECTNODESIZE 250000
+#define TREESIZE 50000
+#define NUMOFTHREAD 4
 
 class agent {
 public:
@@ -89,6 +95,11 @@ public:
 		board::piece_type color;
 	} node_t;
 
+	typedef struct func_para {
+		int index_of_tree;
+		board state;
+	} func_para_t;
+
 	player(const std::string& args = "") : random_agent("name=random role=unknown " + args),
 		space(board::size_x * board::size_y), who(board::empty) {
 		if (name().find_first_of("[]():; ") != std::string::npos)
@@ -104,9 +115,6 @@ public:
 
         if (search() == "MCTS")
      		simulation_times = stoi(sim_time());
-
-        for (int i = 0; i < CHILDNODESIZE; ++i)
-            indexs.push_back(i);
 		
 		collectNode = (node_t *) malloc(sizeof(node_t) * COLLECTNODESIZE);
 		memset(collectNode, 0, sizeof(node_t) * COLLECTNODESIZE);
@@ -135,37 +143,34 @@ public:
             if (!flag)
                 return action();
 
-			nodeCount = 0;
+			// use root parallel mcts
+			std::thread threads[NUMOFTHREAD];
+			for (int i = 0; i < NUMOFTHREAD; ++i) {
+				func_para_t para1 = {i, state};
+				threads[i] = std::thread(&player::child, this, &para1);
+			}
+			for (int i = 0; i < NUMOFTHREAD; ++i)
+				threads[i].join();
 
-            std::shuffle(indexs.begin(), indexs.end(), engine);
+			// compute the ucb of all child of each root
+			float values[CHILDNODESIZE] = {0};
+			for (; q_roots.size() > 0; q_roots.pop()) {
+				node_t *root = q_roots.front();
+				for (int i = 0; i < CHILDNODESIZE; ++i) {
+					node_t *cur = root->child[i];
+					if (cur) {
+						float q = (float) cur->val /  cur->count;
+						float q_rave = (float) cur->rave_val /  cur->rave_count;
+						float beta_ = beta(cur->count, cur->rave_count);
+						values[i] += (1 - beta_) * q + beta_ * q_rave;
+					}
+				}
+			}
 
-			node_t *root = collectNode + nodeCount;
-			nodeCount += 1;
-			// root node value is don't care
-			root->val = root->rave_val = 1;
-			root->count = root->rave_count = 0;
-			root->color = who;
-            memset(root->child, 0, CHILDNODESIZE * sizeof(node_t *));
-
-			clock_t start = clock();
-			while (clock() - start < 990000)
-				playOneSequence(root, state, indexs);
-
+			// find the max value of child
 			int index = 0;
-			float max = -1;
-			for (int i = 0; i < CHILDNODESIZE; ++i) {
-                node_t *cur = root->child[indexs[i]];
-                if (cur) {
-                    float q = (float) cur->val /  cur->count;
-                    float q_rave = (float) cur->rave_val /  cur->rave_count;
-                    float beta_ = beta(cur->count, cur->rave_count);
-					float value = (1 - beta_) * q + beta_ * q_rave;
-                    if (value > max) {
-    				    index = indexs[i];
-                        max = value;
-                    }
-                }
-            }
+			for (int i = 1; i < CHILDNODESIZE; ++i)
+				index = values[i] > values[index] ? i : index;
 
 			return action::place(index, who);
 		}
@@ -211,7 +216,7 @@ public:
         return false;
 	}
 
-	inline void updateValue (node_t *rootNode, int value, int last, bool isEndBoard, int move[CHILDNODESIZE + 1]) {
+	inline void updateValue (node_t *rootNode, int value, int last, bool isEndBoard, int move[CHILDNODESIZE + 1], int& nodeCount, int index_of_tree) {
 		node_t *curNode = rootNode, *lastNode = NULL;
 		last -= isEndBoard;
 		for (int i = 0; i < last; ++i) {
@@ -225,7 +230,7 @@ public:
 			curNode = curNode->child[move[i]];
 		}
         if (!isEndBoard) {
-		    lastNode->child[move[last - 1]] = collectNode + nodeCount;
+		    lastNode->child[move[last - 1]] = collectNode + nodeCount + index_of_tree * TREESIZE;
 			nodeCount += 1;
 			node_t *p = lastNode->child[move[last - 1]];
 			p->color = board::piece_type(3 - lastNode->color);
@@ -235,7 +240,7 @@ public:
 		}
 	}
     
-	inline void playOneSequence (node_t *rootNode, board presentBoard, std::vector<int> indexs) {
+	inline void playOneSequence (node_t *rootNode, board presentBoard, std::vector<int> indexs, int& nodeCount, int index_of_tree) {
 		int i = 0, move[CHILDNODESIZE + 1] = {0};
 		node_t *curNode = rootNode;
         bool isEndBoard = false;
@@ -245,7 +250,7 @@ public:
 			i++;
 		}
 		int value = isEndBoard ? presentBoard.getWhoTakeTurns() != who : simulation(presentBoard, presentBoard.getWhoTakeTurns(), who, indexs);
-		updateValue(rootNode, value, i, isEndBoard, move);
+		updateValue(rootNode, value, i, isEndBoard, move, nodeCount, index_of_tree);
 	}
 
 	int simulation (board presentBoard, board::piece_type present_color, board::piece_type true_color, std::vector<int> indexs) {
@@ -269,11 +274,41 @@ public:
 		return present_color != true_color;
 	}
 
+	node_t *run_mcts (int index_of_tree, const board state) {
+		int nodeCount = 0;
+    	std::vector<int> indexs;
+        for (int i = 0; i < CHILDNODESIZE; ++i)
+            indexs.push_back(i);
+		std::shuffle(indexs.begin(), indexs.end(), engine);
+
+		node_t *root = collectNode + nodeCount + index_of_tree * TREESIZE;
+		nodeCount += 1;
+		// root node value is don't care
+		root->val = root->rave_val = 1;
+		root->count = root->rave_count = 0;
+		root->color = who;
+		memset(root->child, 0, CHILDNODESIZE * sizeof(node_t *));
+
+		clock_t start = clock();
+		while (clock() - start < 980000)
+			playOneSequence(root, state, indexs, nodeCount, index_of_tree);
+
+		return root;
+	}
+
+	void child(void *arg) {
+		func_para_t *para = (func_para_t *) arg;
+		node_t *root = player().run_mcts(para->index_of_tree, para->state);
+		q_roots.push(root);
+	}
+
 private:
 	std::vector<action::place> space;
 	board::piece_type who;
     int simulation_times;
-    std::vector<int> indexs;
 	node_t *collectNode;
-	int nodeCount;
+	// int nodeCount;
+	std::queue<node_t *> q_roots;
 };
+
+
