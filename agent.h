@@ -53,7 +53,6 @@ public:
 	virtual std::string name() const { return property("name"); }
 	virtual std::string role() const { return property("role"); }
 	virtual std::string search() const { return property("search"); }
-	virtual std::string sim_time() const { return property("simulation"); }
 	virtual std::string thread_count() const { return property("thread"); }
 	virtual std::string self_round() const { return property("round"); }
 
@@ -116,10 +115,8 @@ public:
 
         srand(time(NULL));
 
-        if (search() == "MCTS") {
-     		simulation_times = stoi(sim_time());
+        if (search() == "MCTS")
 			thread_num = stoi(thread_count());
-		}
 		
 		collectNode = (node_t *) malloc(sizeof(node_t) * COLLECTNODESIZE);
 		memset(collectNode, 0, sizeof(node_t) * COLLECTNODESIZE);
@@ -139,7 +136,7 @@ public:
 			2, 1, 2, 0, 1, 2, 1, 0, 1,
 		};
 
-		state.set_new_board(board_grid);
+		// state.set_new_board(board_grid);
 	}
 
     float beta (int count, int rave_count) {
@@ -199,13 +196,6 @@ public:
 			int index = 0;
 			for (int i = 1; i < CHILDNODESIZE; ++i)
 				index = values[i] > values[index] ? i : index;
-
-			// board after = state;
-			// if (action::place(index, who).apply(after) != board::legal) {
-			// 	after = state;
-			// 	printf("who: %d\n", after.getWhoTakeTurns());
-			// 	printf("thread num: %d\n", thread_num);
-			// }
 
 			memset(collectNode, 0, sizeof(node_t) * COLLECTNODESIZE);
 
@@ -328,12 +318,14 @@ public:
 		root->color = who;
 		memset(root->child, 0, CHILDNODESIZE * sizeof(node_t *));
 
-		// clock_t start = clock();
-		// long int interval = 1000000 * simulation_times;
-		int count = 0;
-		while (count < 6500) {
+		struct timespec start, finish;
+		double elapsed = 0;
+		clock_gettime(CLOCK_MONOTONIC, &start);
+		while (elapsed < 0.98) {
 			playOneSequence(root, state, indexs, nodeCount, index_of_tree);
-			count += 1;
+			clock_gettime(CLOCK_MONOTONIC, &finish);
+			elapsed = finish.tv_sec - start.tv_sec;
+			elapsed += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
 		}
 	}
 
@@ -345,7 +337,6 @@ public:
 private:
 	std::vector<action::place> space;
 	board::piece_type who;
-    int simulation_times;
 	int thread_num;
 };
 
