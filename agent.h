@@ -157,7 +157,12 @@ public:
 					retIsEye = true;
 					ret = edge_pos[i];
 				}
-				else if (ret == -1)
+				else if (ret == -1 && ( \
+					((i == 0 || i == 1) && state.getStone()[0][4] == board::piece_type::empty) || \
+					((i == 2 || i == 3) && state.getStone()[4][0] == board::piece_type::empty) || \
+					((i == 4 || i == 5) && state.getStone()[4][8] == board::piece_type::empty) || \
+					((i == 6 || i == 7) && state.getStone()[8][4] == board::piece_type::empty)    \
+					))
 					ret = edge_pos[i];
 			}
 		}
@@ -171,7 +176,13 @@ public:
 		const int corner_pos[8] = {1, 9, 7, 17, 63, 73, 71, 79};
 		for (int i = 0; i < 8; ++i) {
 			board after = state;
-			if (action::place(corner_pos[i], who).apply(after) == board::legal && ((makeEye(state, corner_pos[i] / 9, corner_pos[i] % 9, who) >= 0 && !retIsEye) || ret == -1))
+			if (action::place(corner_pos[i], who).apply(after) == board::legal && ((makeEye(state, corner_pos[i] / 9, corner_pos[i] % 9, who) >= 0 && !retIsEye) 
+				|| (ret == -1 && (\
+					((i == 0 || i == 1) && state.getStone()[0][0] == board::piece_type::empty) || \
+					((i == 2 || i == 3) && state.getStone()[0][8] == board::piece_type::empty) || \
+					((i == 4 || i == 5) && state.getStone()[8][0] == board::piece_type::empty) || \
+					((i == 6 || i == 7) && state.getStone()[8][8] == board::piece_type::empty)    \
+				))))
 				ret = corner_pos[i];
 		}
 
