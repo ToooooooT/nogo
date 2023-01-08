@@ -120,24 +120,6 @@ public:
 		
 		collectNode = (node_t *) malloc(sizeof(node_t) * COLLECTNODESIZE);
 		memset(collectNode, 0, sizeof(node_t) * COLLECTNODESIZE);
-		use_hue = true;
-	}
-
-	void make_board (board& state) {
-		int board_grid[81] = {
-		//	A  B  C  D  E  F  G  H  J
-			2, 1, 2, 2, 1, 0, 1, 2, 0, \
-			0, 1, 1, 0, 3, 1, 2, 0, 2, \
-			1, 2, 0, 1, 3, 2, 1, 2, 0, \
-			1, 0, 0, 2, 1, 2, 0, 1, 2, \
-			0, 3, 3, 1, 0, 0, 3, 3, 0, \
-			2, 1, 0, 2, 0, 1, 2, 0, 2, \
-			1, 0, 2, 0, 3, 2, 1, 0, 0, \
-			0, 1, 1, 2, 3, 0, 2, 1, 2, \
-			2, 1, 2, 0, 1, 2, 1, 0, 1,
-		};
-
-		// state.set_new_board(board_grid);
 	}
 
 	void set_timestep (int count) {
@@ -433,6 +415,11 @@ public:
 	void child(void *arg) {
 		func_para_t *para = (func_para_t *) arg;
 		run_mcts(para->index_of_tree, para->state);
+	}
+
+	virtual void open_episode(const std::string& flag = "") {
+		use_hue = true;
+		count_move = 0;
 	}
 
 private:
