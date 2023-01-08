@@ -120,6 +120,7 @@ public:
 		
 		collectNode = (node_t *) malloc(sizeof(node_t) * COLLECTNODESIZE);
 		memset(collectNode, 0, sizeof(node_t) * COLLECTNODESIZE);
+		use_hue = true;
 	}
 
 	void make_board (board& state) {
@@ -139,9 +140,98 @@ public:
 		// state.set_new_board(board_grid);
 	}
 
+	void set_timestep (int count) {
+		double sum = 0, var = 3, mean = 14, prob[40];
+		for (int i = count - 1; i < 40; ++i) {
+			prob[i] = (1 / (var * pow(2 * 3.14159, 0.5)) * exp(-pow(i - mean, 2) / (var * var * 2)));
+			sum += prob[i];
+		}
+		for (int i = count - 1; i < 40; i++)
+			timestep[i] = 0.016 + 1 * prob[i] / sum;
+	}
+
     float beta (int count, int rave_count) {
 	    return (float) rave_count / ((float) rave_count + (float) count + 4 * (float) rave_count * (float) count * pow((_b), 2));
     }
+
+	int hueristic_pos (board state) {
+		/*
+		 *  return position > 0 if legal move else -1 
+		 */
+
+		/* edge: 
+		 * 	up : 3, 5 
+		 * 	left : 27, 45
+		 * 	right : 35, 53 
+		 * 	down : 75, 77
+		 */
+		int ret = -1;
+		const int edge_pos[8] = {3, 5, 27, 45, 25, 53, 75, 77};
+		for (int i = 0; i < 8; ++i) {
+			board after = state;
+			if (action::place(edge_pos[i], who).apply(after) == board::legal && (makeEye(state, edge_pos[i] / 9, edge_pos[i] % 9, who) >= 0 || ret == -1))
+				ret = edge_pos[i];
+		}
+
+		/* corner: 
+		 * 	left up : 1, 9 
+		 * 	right up : 7, 17
+		 * 	left down : 63, 73 
+		 * 	right down : 71, 79
+		 */
+		const int corner_pos[8] = {1, 9, 7, 17, 63, 73, 71, 79};
+		for (int i = 0; i < 8; ++i) {
+			board after = state;
+			if (action::place(corner_pos[i], who).apply(after) == board::legal && (makeEye(state, corner_pos[i] / 9, corner_pos[i] % 9, who) >= 0 || ret == -1))
+				ret = corner_pos[i];
+		}
+
+		if (ret == -1)
+			return ret;
+
+		/*
+		 *  if oponent can make eye then break it.
+		 */
+		for (int i = 0; i < 81; ++i) {
+			board after = state;
+			after.change_turn();
+			if (action::place(i, who).apply(after) == board::legal) {
+				int eye_pos = makeEye(state, i / 9, i % 9, after.getWhoTakeTurns());
+				if (eye_pos >= 0)
+					return eye_pos;
+			}
+		}
+
+		return ret;
+	}
+
+	int makeEye (board state, int x, int y, board::piece_type color) {
+		// return eye position if have eye
+		board after = state;
+		after.setBoard(x * 9 + y, color);
+		if (isEye(after, x - 1, y, color))
+			return (x - 1) * 9 + y;
+		if (isEye(after, x + 1, y, color))
+			return (x + 1) * 9 + y; 
+		if (isEye(after, x, y - 1, color))
+			return x * 9 + y - 1;
+		if (isEye(after, x, y + 1, color))
+			return x * 9 + y + 1;
+		return -1;
+	}
+
+	bool isEye (board state, int x, int y, board::piece_type color) {
+		// hollow : 13, 22, 37, 38, 42, 43, 58, 67
+		if (x < 0 || x >= 9 || y < 0 || y >= 9)
+			return false;
+
+		int index = x * 9 + y;
+		bool left = y < 0 || index == 13 || index == 22 || index == 37 || index == 38 || index == 42 || index == 43 || index == 58 || index == 67 || state.getStone()[x][y] == color;
+		bool right = y >= 9 || index == 13 || index == 22 || index == 37 || index == 38 || index == 42 || index == 43 || index == 58 || index == 67 || state.getStone()[x][y] == color;
+		bool down = x >= 9 || index == 13 || index == 22 || index == 37 || index == 38 || index == 42 || index == 43 || index == 58 || index == 67 || state.getStone()[x][y] == color;
+		bool up = x < 0 || index == 13 || index == 22 || index == 37 || index == 38 || index == 42 || index == 43 || index == 58 || index == 67 || state.getStone()[x][y] == color;
+		return left & right & down & up;
+	}
 
 	virtual action take_action(const board& state) {
 		if (search() == "Random") {
@@ -153,15 +243,26 @@ public:
 			}
 			return action();
 		} else if (search() == "MCTS") {
-            bool flag = false;
-			for (const action::place& move : space) {
-				board after = state;
-				if (move.apply(after) == board::legal)
-                    flag = true;
-            }
-            if (!flag)
-                return action();
+            // bool flag = false;
+			// for (const action::place& move : space) {
+			// 	board after = state;
+			// 	if (move.apply(after) == board::legal)
+            //         flag = true;
+            // }
+            // if (!flag)
+            //     return action();
 
+			// use hueristic
+			int hue_pos;
+			if (use_hue) {
+				hue_pos = hueristic_pos(state);
+				board after = state;
+				if (hue_pos > 0 && action::place(hue_pos, who).apply(after) == board::legal)
+					return action::place(hue_pos, who);
+				else
+					use_hue = false;
+			}
+				
 			// use root parallel mcts
 			std::thread threads[thread_num];
 			func_para_t para[thread_num]; 
@@ -197,7 +298,7 @@ public:
 			for (int i = 1; i < CHILDNODESIZE; ++i)
 				index = values[i] > values[index] ? i : index;
 
-			memset(collectNode, 0, sizeof(node_t) * COLLECTNODESIZE);
+			// memset(collectNode, 0, sizeof(node_t) * COLLECTNODESIZE);
 
 			return action::place(index, who);
 		}
@@ -338,6 +439,8 @@ private:
 	std::vector<action::place> space;
 	board::piece_type who;
 	int thread_num;
+	double timestep[40];
+	bool use_hue;
 };
 
 
