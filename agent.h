@@ -99,6 +99,7 @@ typedef struct func_para {
 } func_para_t;
 
 node_t *collectNode;
+double timestep[41];
 
 class player : public random_agent {
 public:
@@ -122,14 +123,14 @@ public:
 		memset(collectNode, 0, sizeof(node_t) * COLLECTNODESIZE);
 	}
 
-	void set_timestep (int count) {
-		double sum = 0, var = 3, mean = 14, prob[40];
-		for (int i = count - 1; i < 40; ++i) {
+	void set_timestep (int cnt) {
+		double sum = 0, var = 3, mean = 14, prob[41];
+		for (int i = cnt; i <= 40; ++i) {
 			prob[i] = (1 / (var * pow(2 * 3.14159, 0.5)) * exp(-pow(i - mean, 2) / (var * var * 2)));
 			sum += prob[i];
 		}
-		for (int i = count - 1; i < 40; i++)
-			timestep[i] = 0.016 + 1 * prob[i] / sum;
+		for (int i = cnt; i <= 40; ++i)
+			timestep[i] = 0.016 + 35 * prob[i] / sum;
 	}
 
     float beta (int count, int rave_count) {
@@ -254,8 +255,13 @@ public:
 				board after = state;
 				if (hue_pos >= 0 && action::place(hue_pos, who).apply(after) == board::legal)
 					return action::place(hue_pos, who);
-				else
+				else {
 					use_hue = false;
+					set_timestep(count_move);
+				}
+			} else if (use_hue) {
+				use_hue = false;
+				set_timestep(count_move);
 			}
 				
 			// use root parallel mcts
@@ -415,7 +421,7 @@ public:
 		struct timespec start, finish;
 		double elapsed = 0;
 		clock_gettime(CLOCK_MONOTONIC, &start);
-		while (elapsed < 0.98) {
+		while (elapsed < timestep[count_move]) {
 			playOneSequence(root, state, indexs, nodeCount, index_of_tree);
 			clock_gettime(CLOCK_MONOTONIC, &finish);
 			elapsed = finish.tv_sec - start.tv_sec;
@@ -437,7 +443,6 @@ private:
 	std::vector<action::place> space;
 	board::piece_type who;
 	int thread_num;
-	double timestep[40];
 	bool use_hue;
 	int count_move = 0;
 };
