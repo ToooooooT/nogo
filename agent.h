@@ -28,7 +28,7 @@
 
 #define CHILDNODESIZE 81
 #define _b 0.025
-#define COLLECTNODESIZE 250000
+#define COLLECTNODESIZE 200000
 #define TREESIZE 50000
 
 class agent {
@@ -55,6 +55,7 @@ public:
 	virtual std::string search() const { return property("search"); }
 	virtual std::string sim_time() const { return property("simulation"); }
 	virtual std::string thread_count() const { return property("thread"); }
+	virtual std::string self_round() const { return property("round"); }
 
 protected:
 	typedef std::string key;
@@ -124,6 +125,23 @@ public:
 		memset(collectNode, 0, sizeof(node_t) * COLLECTNODESIZE);
 	}
 
+	void make_board (board& state) {
+		int board_grid[81] = {
+		//	A  B  C  D  E  F  G  H  J
+			2, 1, 2, 2, 1, 0, 1, 2, 0, \
+			0, 1, 1, 0, 3, 1, 2, 0, 2, \
+			1, 2, 0, 1, 3, 2, 1, 2, 0, \
+			1, 0, 0, 2, 1, 2, 0, 1, 2, \
+			0, 3, 3, 1, 0, 0, 3, 3, 0, \
+			2, 1, 0, 2, 0, 1, 2, 0, 2, \
+			1, 0, 2, 0, 3, 2, 1, 0, 0, \
+			0, 1, 1, 2, 3, 0, 2, 1, 2, \
+			2, 1, 2, 0, 1, 2, 1, 0, 1,
+		};
+
+		state.set_new_board(board_grid);
+	}
+
     float beta (int count, int rave_count) {
 	    return (float) rave_count / ((float) rave_count + (float) count + 4 * (float) rave_count * (float) count * pow((_b), 2));
     }
@@ -167,6 +185,8 @@ public:
 				for (int i = 0; i < CHILDNODESIZE; ++i) {
 					node_t *cur = root->child[i];
 					if (cur) {
+						if (values[i] == -1)
+							values[i] = 0;
 						float q = (float) cur->val /  cur->count;
 						float q_rave = (float) cur->rave_val /  cur->rave_count;
 						float beta_ = beta(cur->count, cur->rave_count);
@@ -308,14 +328,13 @@ public:
 		root->color = who;
 		memset(root->child, 0, CHILDNODESIZE * sizeof(node_t *));
 
-		clock_t start = clock();
-		long int interval = 1000000 * simulation_times;
+		// clock_t start = clock();
+		// long int interval = 1000000 * simulation_times;
 		int count = 0;
-		while (clock() - start < interval) {
+		while (count < 6500) {
 			playOneSequence(root, state, indexs, nodeCount, index_of_tree);
 			count += 1;
 		}
-		printf("who: %d, index of tree: %d, simulation count: %d, time: %ld\n", who, index_of_tree, count, interval / CLOCKS_PER_SEC);
 	}
 
 	void child(void *arg) {
