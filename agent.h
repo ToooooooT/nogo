@@ -211,7 +211,7 @@ public:
 
 	bool isEye (board state, int x, int y, board::piece_type color) {
 		// hollow : 13, 22, 37, 38, 42, 43, 58, 67
-		if (x < 0 || x >= 9 || y < 0 || y >= 9 || state.getStone()[x][y] == board::piece_type::empty)
+		if (x < 0 || x >= 9 || y < 0 || y >= 9 || state.getStone()[x][y] != board::piece_type::empty)
 			return false;
 
 		int left_index = x * 9 + y - 1;
