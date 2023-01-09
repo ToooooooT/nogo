@@ -30,6 +30,9 @@
 #define _b 0.025
 #define COLLECTNODESIZE 4000000
 #define TREESIZE 1000000
+#define TOTALTIME 295
+#define BASETIME 0.05
+#define THRESHOLD 10
 
 class agent {
 public:
@@ -127,12 +130,12 @@ public:
 
 	void set_timestep (int cnt) {
 		double sum = 0, var = 3, mean = 14, prob[41];
-		for (int i = cnt; i <= 40; ++i) {
+		for (int i = cnt; i <= 37; ++i) {
 			prob[i] = (1 / (var * pow(2 * 3.14159, 0.5)) * exp(-pow(i - mean, 2) / (var * var * 2)));
 			sum += prob[i];
 		}
-		for (int i = cnt; i <= 40; ++i)
-			timestep[i] = 0.016 + 35.1 * prob[i] / sum;
+		for (int i = cnt; i <= 37; ++i)
+			timestep[i] = BASETIME + TOTALTIME * prob[i] / sum;
 	}
 
     float beta (int count, int rave_count) {
@@ -199,7 +202,7 @@ public:
 		const int corner_pos[8] = {1, 9, 7, 17, 63, 73, 71, 79};
 		for (int i = 0; i < 8; ++i) {
 			board after = state;
-			if (action::place(corner_pos[i], who).apply(after) == board::legal && !useEdge) {
+			if (action::place(corner_pos[i], who).apply(after) == board::legal && !useEdge & !retIsEye) {
 				if (makeEye(state, corner_pos[i] / 9, corner_pos[i] % 9, who) >= 0) {
 					ret = corner_pos[i];
 					retIsEye = true;
@@ -222,13 +225,35 @@ public:
 		 */
 		board opp_state = state;
 		opp_state.change_turn();
-		for (int i = 0; i < 81; ++i) {
-			board after = opp_state;
-			if (action::place(i, after.getWhoTakeTurns()).apply(after) == board::legal) {
-				int eye_pos = makeEye(opp_state, i / 9, i % 9, opp_state.getWhoTakeTurns());
-				after = state;
-				if (eye_pos >= 0 && action::place(eye_pos, who).apply(after) == board::legal)
-					return eye_pos;
+		for (int i = 1; i < 8; ++i) {
+			for (int j = 1; j < 8; ++j) {
+				board after = opp_state;
+				if (action::place(i * 9 + j, after.getWhoTakeTurns()).apply(after) == board::legal) {
+					int eye_pos = makeEye(opp_state, i, j, opp_state.getWhoTakeTurns());
+					after = state;
+					if (eye_pos >= 0 && action::place(eye_pos, who).apply(after) == board::legal)
+						return eye_pos;
+				}
+			}
+		}
+		for (int i = 0; i < 9; i += 8) {
+			for (int j = 4; j >= 0; --j) {
+				board after = opp_state;
+				if (action::place(i * 9 + j, after.getWhoTakeTurns()).apply(after) == board::legal) {
+					int eye_pos = makeEye(opp_state, i, j, opp_state.getWhoTakeTurns());
+					after = state;
+					if (eye_pos >= 0 && action::place(eye_pos, who).apply(after) == board::legal)
+						return eye_pos;
+				}
+			}
+			for (int j = 5; j <= 8; ++j) {
+				board after = opp_state;
+				if (action::place(i * 9 + j, after.getWhoTakeTurns()).apply(after) == board::legal) {
+					int eye_pos = makeEye(opp_state, i, j, opp_state.getWhoTakeTurns());
+					after = state;
+					if (eye_pos >= 0 && action::place(eye_pos, who).apply(after) == board::legal)
+						return eye_pos;
+				}
 			}
 		}
 
@@ -300,7 +325,7 @@ public:
 		} else if (search() == "MCTS") {
 			// use hueristic
 			int hue_pos, move = who == board::piece_type::black ? count_move_black : count_move_white;
-			if (use_hue && move <= 8) {
+			if (use_hue && move <= 10) {
 				hue_pos = hueristic_pos(state);
 				board after = state;
 				if (hue_pos >= 0 && action::place(hue_pos, who).apply(after) == board::legal)
