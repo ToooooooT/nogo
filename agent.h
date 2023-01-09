@@ -28,8 +28,8 @@
 
 #define CHILDNODESIZE 81
 #define _b 0.025
-#define COLLECTNODESIZE 200000
-#define TREESIZE 50000
+#define COLLECTNODESIZE 4000000
+#define TREESIZE 1000000
 
 class agent {
 public:
@@ -98,8 +98,10 @@ typedef struct func_para {
 	board state;
 } func_para_t;
 
-node_t *collectNode;
-double timestep[41];
+node_t *collectNode; // tree node
+double timestep[41]; // time management : time for every step to think
+int count_move_black = 0;
+int count_move_white = 0;
 
 class player : public random_agent {
 public:
@@ -130,7 +132,7 @@ public:
 			sum += prob[i];
 		}
 		for (int i = cnt; i <= 40; ++i)
-			timestep[i] = 0.016 + 35 * prob[i] / sum;
+			timestep[i] = 0.016 + 35.1 * prob[i] / sum;
 	}
 
     float beta (int count, int rave_count) {
@@ -238,7 +240,10 @@ public:
 	}
 
 	virtual action take_action(const board& state) {
-		count_move += 1;
+		if (who == board::piece_type::black)
+			count_move_black += 1;
+		else
+			count_move_white += 1;
 		if (search() == "Random") {
 			std::shuffle(space.begin(), space.end(), engine);
 			for (const action::place& move : space) {
@@ -249,19 +254,19 @@ public:
 			return action();
 		} else if (search() == "MCTS") {
 			// use hueristic
-			int hue_pos;
-			if (use_hue && count_move <= 8) {
+			int hue_pos, move = who == board::piece_type::black ? count_move_black : count_move_white;
+			if (use_hue && move <= 8) {
 				hue_pos = hueristic_pos(state);
 				board after = state;
 				if (hue_pos >= 0 && action::place(hue_pos, who).apply(after) == board::legal)
 					return action::place(hue_pos, who);
 				else {
 					use_hue = false;
-					set_timestep(count_move);
+					set_timestep(move);
 				}
 			} else if (use_hue) {
 				use_hue = false;
-				set_timestep(count_move);
+				set_timestep(move);
 			}
 				
 			// use root parallel mcts
@@ -421,7 +426,8 @@ public:
 		struct timespec start, finish;
 		double elapsed = 0;
 		clock_gettime(CLOCK_MONOTONIC, &start);
-		while (elapsed < timestep[count_move]) {
+		int move = who == board::piece_type::black ? count_move_black : count_move_white;
+		while (elapsed < timestep[move]) {
 			playOneSequence(root, state, indexs, nodeCount, index_of_tree);
 			clock_gettime(CLOCK_MONOTONIC, &finish);
 			elapsed = finish.tv_sec - start.tv_sec;
@@ -436,7 +442,8 @@ public:
 
 	virtual void open_episode(const std::string& flag = "") {
 		use_hue = true;
-		count_move = 0;
+		count_move_black = 0;
+		count_move_white = 0;
 	}
 
 private:
@@ -444,7 +451,6 @@ private:
 	board::piece_type who;
 	int thread_num;
 	bool use_hue;
-	int count_move = 0;
 };
 
 
