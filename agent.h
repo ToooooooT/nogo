@@ -144,29 +144,49 @@ public:
 		 *  return position > 0 if legal move else -1 
 		 */
 
+		int ret = -1, retWeakEyeCnt = 0;
+		bool retIsEye = false, useEdge = false;
+
+		// first make eye
+		for (int i = 0; i < 81; ++i) {
+			board after = state;
+			if (action::place(i, who).apply(after) == board::legal) {
+				if (makeEye(state, i / 9, i % 9, who) >= 0) {
+					retIsEye = true;
+					ret = i;
+				} else if (!retIsEye) {
+					int cnt = makeWeakEyeCnt(state, i / 9, i % 9, who);
+					if (cnt > retWeakEyeCnt) {
+						ret = i;
+						retWeakEyeCnt = cnt;
+					}
+				}
+			}
+		}
+
 		/* edge: 
 		 * 	up : 3, 5 
 		 * 	left : 27, 45
 		 * 	right : 35, 53 
 		 * 	down : 75, 77
 		 */
-		int ret = -1;
-		bool retIsEye = false;
-		const int edge_pos[8] = {3, 5, 27, 45, 35, 53, 75, 77};
+		const int edge_pos[8] = {3, 5, 27, 45, 53, 35, 77, 75};
 		for (int i = 0; i < 8; ++i) {
 			board after = state;
 			if (action::place(edge_pos[i], who).apply(after) == board::legal) {
 				if (makeEye(state, edge_pos[i] / 9, edge_pos[i] % 9, who) >= 0) {
 					retIsEye = true;
 					ret = edge_pos[i];
+					useEdge = true;
 				}
-				else if (ret == -1 && ( \
-					((i == 0 || i == 1) && state.getStone()[0][4] == board::piece_type::empty) || \
-					((i == 2 || i == 3) && state.getStone()[4][0] == board::piece_type::empty) || \
-					((i == 4 || i == 5) && state.getStone()[4][8] == board::piece_type::empty) || \
-					((i == 6 || i == 7) && state.getStone()[8][4] == board::piece_type::empty)    \
-					))
-					ret = edge_pos[i];
+				else if (!retIsEye) {
+					int cnt = makeWeakEyeCnt(state, edge_pos[i] / 9, edge_pos[i] % 9, who);
+					if (cnt >= retWeakEyeCnt - 1 && !useEdge) {
+						ret = edge_pos[i];
+						retWeakEyeCnt = cnt;
+						useEdge = true;
+					}
+				}
 			}
 		}
 
@@ -179,14 +199,19 @@ public:
 		const int corner_pos[8] = {1, 9, 7, 17, 63, 73, 71, 79};
 		for (int i = 0; i < 8; ++i) {
 			board after = state;
-			if (action::place(corner_pos[i], who).apply(after) == board::legal && ((makeEye(state, corner_pos[i] / 9, corner_pos[i] % 9, who) >= 0 && !retIsEye) 
-				|| (ret == -1 && (\
-					((i == 0 || i == 1) && state.getStone()[0][0] == board::piece_type::empty) || \
-					((i == 2 || i == 3) && state.getStone()[0][8] == board::piece_type::empty) || \
-					((i == 4 || i == 5) && state.getStone()[8][0] == board::piece_type::empty) || \
-					((i == 6 || i == 7) && state.getStone()[8][8] == board::piece_type::empty)    \
-				))))
-				ret = corner_pos[i];
+			if (action::place(corner_pos[i], who).apply(after) == board::legal && !useEdge) {
+				if (makeEye(state, corner_pos[i] / 9, corner_pos[i] % 9, who) >= 0) {
+					ret = corner_pos[i];
+					retIsEye = true;
+				}
+				else if (!retIsEye) {
+					int cnt = makeWeakEyeCnt(state, corner_pos[i] / 9, corner_pos[i] % 9, who);
+					if (cnt > retWeakEyeCnt && ret == -1) {
+						ret = corner_pos[i];
+						retWeakEyeCnt = cnt;
+					}
+				}
+			}
 		}
 
 		if (ret == -1)
@@ -195,12 +220,14 @@ public:
 		/*
 		 *  if oponent can make eye then break it.
 		 */
-		state.change_turn();
+		board opp_state = state;
+		opp_state.change_turn();
 		for (int i = 0; i < 81; ++i) {
-			board after = state;
+			board after = opp_state;
 			if (action::place(i, after.getWhoTakeTurns()).apply(after) == board::legal) {
-				int eye_pos = makeEye(state, i / 9, i % 9, state.getWhoTakeTurns());
-				if (eye_pos >= 0)
+				int eye_pos = makeEye(opp_state, i / 9, i % 9, opp_state.getWhoTakeTurns());
+				after = state;
+				if (eye_pos >= 0 && action::place(eye_pos, who).apply(after) == board::legal)
 					return eye_pos;
 			}
 		}
@@ -212,18 +239,34 @@ public:
 		// return eye position if have eye
 		board after = state;
 		after.setBoard(x * 9 + y, color);
-		if (isEye(after, x - 1, y, color))
+		if (isEye(after, x - 1, y, color) == 4)
 			return (x - 1) * 9 + y;
-		if (isEye(after, x + 1, y, color))
+		if (isEye(after, x + 1, y, color) == 4)
 			return (x + 1) * 9 + y; 
-		if (isEye(after, x, y - 1, color))
+		if (isEye(after, x, y - 1, color) == 4)
 			return x * 9 + y - 1;
-		if (isEye(after, x, y + 1, color))
+		if (isEye(after, x, y + 1, color) == 4)
 			return x * 9 + y + 1;
 		return -1;
 	}
 
-	bool isEye (board state, int x, int y, board::piece_type color) {
+	int makeWeakEyeCnt (board state, int x, int y, board::piece_type color) {
+		// return eye position if have eye
+		board after = state;
+		after.setBoard(x * 9 + y, color);
+		int cnt = 0;
+		if (isEye(after, x - 1, y, color) == 3)
+			cnt += 1;
+		if (isEye(after, x + 1, y, color) == 3)
+			cnt += 1;
+		if (isEye(after, x, y - 1, color) == 3)
+			cnt += 1;
+		if (isEye(after, x, y + 1, color) == 3)
+			cnt += 1;
+		return cnt;
+	}
+
+	int isEye (board state, int x, int y, board::piece_type color) {
 		// hollow : 13, 22, 37, 38, 42, 43, 58, 67
 		if (x < 0 || x >= 9 || y < 0 || y >= 9 || state.getStone()[x][y] != board::piece_type::empty)
 			return false;
@@ -236,14 +279,16 @@ public:
 		bool right = y + 1 >= 9 || right_index == 13 || right_index == 22 || right_index == 37 || right_index == 38 || right_index == 42 || right_index == 43 || right_index == 58 || right_index == 67 || state.getStone()[x][y + 1] == color;
 		bool down = x + 1 >= 9 || down_index == 13 || down_index == 22 || down_index == 37 || down_index == 38 || down_index == 42 || down_index == 43 || down_index == 58 || down_index == 67 || state.getStone()[x + 1][y] == color;
 		bool up = x - 1 < 0 || up_index == 13 || up_index == 22 || up_index == 37 || up_index == 38 || up_index == 42 || up_index == 43 || up_index == 58 || up_index == 67 || state.getStone()[x - 1][y] == color;
-		return left & right & down & up;
+		return left + right + down + up;
 	}
 
 	virtual action take_action(const board& state) {
-		if (who == board::piece_type::black)
+		if (who == board::piece_type::black) {
 			count_move_black += 1;
-		else
+		}
+		else {
 			count_move_white += 1;
+		}
 		if (search() == "Random") {
 			std::shuffle(space.begin(), space.end(), engine);
 			for (const action::place& move : space) {
