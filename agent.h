@@ -28,10 +28,10 @@
 
 #define CHILDNODESIZE 81
 #define _b 0.025
-#define COLLECTNODESIZE 4000000
-#define TREESIZE 1000000
-#define TOTALTIME 292
-#define BASETIME 0.05
+#define COLLECTNODESIZE 6000000
+#define TREESIZE 1500000
+#define TOTALTIME 290
+#define BASETIME 0.1
 #define THRESHOLD 10
 
 class agent {
@@ -129,7 +129,7 @@ public:
 	}
 
 	void set_timestep (int cnt) {
-		double sum = 0, var = 3, mean = 14, prob[41];
+		double sum = 0, var = 3, mean = 15, prob[41];
 		for (int i = cnt; i <= 37; ++i) {
 			prob[i] = (1 / (var * pow(2 * 3.14159, 0.5)) * exp(-pow(i - mean, 2) / (var * var * 2)));
 			sum += prob[i];
@@ -232,13 +232,15 @@ public:
 
 		board opp_state = state;
 		opp_state.change_turn();
-		if (opp_state.getWhoTakeTurns() == opp_state.getStone()[3][3] && opp_state.getWhoTakeTurns() == opp_state.getStone()[5][5]) {
-			board after = state;
+		board after = opp_state;
+		if (opp_state.getWhoTakeTurns() == opp_state.getStone()[3][3] && opp_state.getWhoTakeTurns() == opp_state.getStone()[5][5] && action::place(40, after.getWhoTakeTurns()).apply(after) == board::legal) {
+			after = state;
 			if (action::place(40, after.getWhoTakeTurns()).apply(after) == board::legal)
 				return 40;
 		}
-		if (opp_state.getWhoTakeTurns() == opp_state.getStone()[5][3] && opp_state.getWhoTakeTurns() == opp_state.getStone()[3][5]) {
-			board after = state;
+		after = opp_state;
+		if (opp_state.getWhoTakeTurns() == opp_state.getStone()[5][3] && opp_state.getWhoTakeTurns() == opp_state.getStone()[3][5] && action::place(40, after.getWhoTakeTurns()).apply(after) == board::legal) {
+			after = state;
 			if (action::place(40, after.getWhoTakeTurns()).apply(after) == board::legal)
 				return 40;
 		}
@@ -360,7 +362,7 @@ public:
 		} else if (search() == "MCTS") {
 			// use hueristic
 			int hue_pos, move = who == board::piece_type::black ? count_move_black : count_move_white;
-			if (use_hue && move <= 10) {
+			if (use_hue && move <= 12) {
 				hue_pos = hueristic_pos(state);
 				board after = state;
 				if (hue_pos >= 0 && action::place(hue_pos, who).apply(after) == board::legal)
