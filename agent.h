@@ -30,7 +30,7 @@
 #define _b 0.025
 #define COLLECTNODESIZE 4000000
 #define TREESIZE 1000000
-#define TOTALTIME 295
+#define TOTALTIME 292
 #define BASETIME 0.05
 #define THRESHOLD 10
 
@@ -184,7 +184,12 @@ public:
 				}
 				else if (!retIsEye) {
 					int cnt = makeWeakEyeCnt(state, edge_pos[i] / 9, edge_pos[i] % 9, who);
-					if (cnt >= retWeakEyeCnt - 1 && !useEdge) {
+					if (cnt >= retWeakEyeCnt && !useEdge && ( \
+ 						((i == 0 || i == 1) && state.getStone()[0][4] == board::piece_type::empty) || \
+	 					((i == 2 || i == 3) && state.getStone()[4][0] == board::piece_type::empty) || \
+ 						((i == 4 || i == 5) && state.getStone()[4][8] == board::piece_type::empty) || \
+ 						((i == 6 || i == 7) && state.getStone()[8][4] == board::piece_type::empty)    \
+ 						)) {
 						ret = edge_pos[i];
 						retWeakEyeCnt = cnt;
 						useEdge = true;
@@ -209,7 +214,12 @@ public:
 				}
 				else if (!retIsEye) {
 					int cnt = makeWeakEyeCnt(state, corner_pos[i] / 9, corner_pos[i] % 9, who);
-					if (cnt > retWeakEyeCnt && ret == -1) {
+					if (cnt > retWeakEyeCnt && ret == -1  && (\
+	 					((i == 0 || i == 1) && state.getStone()[0][0] == board::piece_type::empty) || \
+ 						((i == 2 || i == 3) && state.getStone()[0][8] == board::piece_type::empty) || \
+ 						((i == 4 || i == 5) && state.getStone()[8][0] == board::piece_type::empty) || \
+ 						((i == 6 || i == 7) && state.getStone()[8][8] == board::piece_type::empty)    \
+ 					)) {
 						ret = corner_pos[i];
 						retWeakEyeCnt = cnt;
 					}
@@ -220,10 +230,23 @@ public:
 		if (ret == -1)
 			return ret;
 
+		board opp_state = state;
+		opp_state.change_turn();
+		if (opp_state.getWhoTakeTurns() == opp_state.getStone()[3][3] && opp_state.getWhoTakeTurns() == opp_state.getStone()[5][5]) {
+			board after = state;
+			if (action::place(40, after.getWhoTakeTurns()).apply(after) == board::legal)
+				return 40;
+		}
+		if (opp_state.getWhoTakeTurns() == opp_state.getStone()[5][3] && opp_state.getWhoTakeTurns() == opp_state.getStone()[3][5]) {
+			board after = state;
+			if (action::place(40, after.getWhoTakeTurns()).apply(after) == board::legal)
+				return 40;
+		}
+
 		/*
 		 *  if oponent can make eye then break it.
 		 */
-		board opp_state = state;
+		opp_state = state;
 		opp_state.change_turn();
 		for (int i = 1; i < 8; ++i) {
 			for (int j = 1; j < 8; ++j) {
@@ -236,23 +259,35 @@ public:
 				}
 			}
 		}
-		for (int i = 0; i < 9; i += 8) {
-			for (int j = 4; j >= 0; --j) {
-				board after = opp_state;
-				if (action::place(i * 9 + j, after.getWhoTakeTurns()).apply(after) == board::legal) {
-					int eye_pos = makeEye(opp_state, i, j, opp_state.getWhoTakeTurns());
-					after = state;
-					if (eye_pos >= 0 && action::place(eye_pos, who).apply(after) == board::legal)
-						return eye_pos;
+		for (int i = 0; i < 9; ++i) {
+			if (i > 0 && i < 8) {
+				for (int j = 0; j <= 8; j += 8) {
+					board after = opp_state;
+					if (action::place(i * 9 + j, after.getWhoTakeTurns()).apply(after) == board::legal) {
+						int eye_pos = makeEye(opp_state, i, j, opp_state.getWhoTakeTurns());
+						after = state;
+						if (eye_pos >= 0 && action::place(eye_pos, who).apply(after) == board::legal)
+							return eye_pos;
+					}
 				}
-			}
-			for (int j = 5; j <= 8; ++j) {
-				board after = opp_state;
-				if (action::place(i * 9 + j, after.getWhoTakeTurns()).apply(after) == board::legal) {
-					int eye_pos = makeEye(opp_state, i, j, opp_state.getWhoTakeTurns());
-					after = state;
-					if (eye_pos >= 0 && action::place(eye_pos, who).apply(after) == board::legal)
-						return eye_pos;
+			} else {
+				for (int j = 4; j >= 0; --j) {
+					board after = opp_state;
+					if (action::place(i * 9 + j, after.getWhoTakeTurns()).apply(after) == board::legal) {
+						int eye_pos = makeEye(opp_state, i, j, opp_state.getWhoTakeTurns());
+						after = state;
+						if (eye_pos >= 0 && action::place(eye_pos, who).apply(after) == board::legal)
+							return eye_pos;
+					}
+				}
+				for (int j = 5; j <= 8; ++j) {
+					board after = opp_state;
+					if (action::place(i * 9 + j, after.getWhoTakeTurns()).apply(after) == board::legal) {
+						int eye_pos = makeEye(opp_state, i, j, opp_state.getWhoTakeTurns());
+						after = state;
+						if (eye_pos >= 0 && action::place(eye_pos, who).apply(after) == board::legal)
+							return eye_pos;
+					}
 				}
 			}
 		}
